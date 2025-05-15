@@ -46,11 +46,6 @@ class SplashScreen:
                               bg="#001839", fg="white")
             logo_label.pack(pady=(80, 20))
         
-        # App name
-        #app_name = Label(content_frame, text="Cartoonify Your Image", font=("Arial", 16), 
-        #               bg="#001839", fg="white")
-        #app_name.pack(pady=10)
-        
         # Loading indicator
         loading_label = Label(content_frame, text="Loading...", font=("Arial", 12), 
                              bg="#001839", fg="#AAAAAA")
@@ -58,6 +53,99 @@ class SplashScreen:
     
     def destroy(self):
         self.splash.destroy()
+
+class CameraWindow:
+    def __init__(self, parent, callback):
+        self.parent = parent
+        self.callback = callback
+        
+        # Create camera window
+        self.window = Toplevel(parent)
+        self.window.title("Camera")
+        self.window.geometry("680x520")
+        self.window.configure(bg="#001839")
+        
+        # Center on screen
+        screen_width = self.window.winfo_screenwidth()
+        screen_height = self.window.winfo_screenheight()
+        x = (screen_width - 680) // 2
+        y = (screen_height - 520) // 2
+        self.window.geometry(f"680x520+{x}+{y}")
+        
+        # Add a title
+        title_label = Label(self.window, text="Camera Preview", font=("Arial", 16), bg="#001839", fg="white")
+        title_label.pack(pady=10)
+        
+        # Camera preview frame
+        self.camera_frame = Label(self.window, bg="black", width=640, height=480)
+        self.camera_frame.pack(pady=10)
+        
+        # Buttons frame
+        buttons_frame = Frame(self.window, bg="#001839")
+        buttons_frame.pack(pady=10)
+        
+        # Capture button
+        self.capture_button = Button(buttons_frame, text="Capture", command=self.capture_image,
+                                    bg="#1976D2", fg="white", font=("Arial", 12),
+                                    padx=15, pady=5, borderwidth=0)
+        self.capture_button.pack(side=tk.LEFT, padx=10)
+        
+        # Cancel button
+        self.cancel_button = Button(buttons_frame, text="Cancel", command=self.close_camera,
+                                   bg="#757575", fg="white", font=("Arial", 12),
+                                   padx=15, pady=5, borderwidth=0)
+        self.cancel_button.pack(side=tk.LEFT, padx=10)
+        
+        # Initialize webcam
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open webcam. Please check your camera connection.")
+            self.window.destroy()
+            return
+            
+        # Set camera resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
+        # Start video feed
+        self.update_cam()
+        
+        # Set up window close handler
+        self.window.protocol("WM_DELETE_WINDOW", self.close_camera)
+        
+    def update_cam(self):
+        # Get a frame from the webcam
+        ret, frame = self.cap.read()
+        if ret:
+            # Convert frame to format tkinter can display
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame_rgb)
+            img_tk = ImageTk.PhotoImage(image=img)
+            
+            # Update the label
+            self.camera_frame.configure(image=img_tk)
+            self.camera_frame.image = img_tk
+            
+            # Store the current frame
+            self.current_frame = frame
+            
+        # Schedule the next update
+        self.window.after(10, self.update_cam)
+    
+    def capture_image(self):
+        # Capture the current frame
+        if hasattr(self, 'current_frame'):
+            # Save the frame as image
+            self.callback(self.current_frame)
+            self.close_camera()
+    
+    def close_camera(self):
+        # Release the webcam
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
+        
+        # Close the window
+        self.window.destroy()
 
 class CartoonifyApp:
     def __init__(self, root):
@@ -75,11 +163,32 @@ class CartoonifyApp:
                                 bg="#001839", fg="white")
         self.title_label.pack(pady=20)
 
-        # Open Image Button (styled as "Upload Image")
-        self.open_button = Button(root, text="Upload Image", command=self.open_image, 
+        # Create image source buttons frame first
+        self.source_frame = Frame(root, bg="#001839")
+        self.source_frame.pack(pady=10)
+
+        # Open Image Button
+        self.open_button = Button(self.source_frame, text="Upload Image", command=self.open_image, 
                                  bg="#1976D2", fg="white", font=("Arial", 12),
                                  padx=10, pady=5, borderwidth=0)
-        self.open_button.pack(pady=10)
+        self.open_button.pack(side=tk.LEFT, padx=10)
+
+        # Try to load camera icon for the Camera Button
+        try:
+            camera_img = Image.open("images\\camera_icon.png")
+            camera_img = camera_img.resize((30, 30), Image.LANCZOS)
+            self.camera_photo = ImageTk.PhotoImage(camera_img)
+            
+            self.camera_button = Button(self.source_frame, image=self.camera_photo, command=self.open_camera,
+                                      bg="#1976D2", fg="white", borderwidth=0, padx=10, pady=5)
+        except Exception as e:
+            print(f"Error loading camera icon: {e}")
+            # If camera icon can't be loaded, use text instead
+            self.camera_button = Button(self.source_frame, text="Camera", command=self.open_camera,
+                                      bg="#1976D2", fg="white", font=("Arial", 12),
+                                      padx=10, pady=5, borderwidth=0)
+        
+        self.camera_button.pack(side=tk.LEFT, padx=10)
 
         # Image display frame (side-by-side with arrow between)
         self.image_frame = Frame(root, bg="#001839")
@@ -203,6 +312,14 @@ class CartoonifyApp:
             self.original_image = image
             self.show_image(image, is_original=True)
             self.save_button.config(state='normal')
+    
+    def open_camera(self):
+        self.camera_window = CameraWindow(self.root, self.process_camera_image)
+    
+    def process_camera_image(self, image):
+        self.original_image = image
+        self.show_image(image, is_original=True)
+        self.save_button.config(state='normal')
 
     def show_image(self, cv_img, is_original=True):
         img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
@@ -312,7 +429,7 @@ if __name__ == "__main__":
     splash = SplashScreen(root)
     
     # Simulate loading time
-    root.after(3000, splash.destroy)  # Show splash for 2 seconds
+    root.after(3000, splash.destroy)  # Show splash for 3 seconds
     root.after(2200, root.deiconify)  # Show main window after splash is gone
     
     app = CartoonifyApp(root)
