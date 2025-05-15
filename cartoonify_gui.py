@@ -313,7 +313,7 @@ if __name__ == "__main__":
     
     # Simulate loading time
     root.after(3000, splash.destroy)  # Show splash for 2 seconds
-    root.after(2100, root.deiconify)  # Show main window after splash is gone
+    root.after(2200, root.deiconify)  # Show main window after splash is gone
     
     app = CartoonifyApp(root)
     root.mainloop()
