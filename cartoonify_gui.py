@@ -13,7 +13,7 @@ class SplashScreen:
         self.splash.geometry("400x400")
         
         # Remove window decorations for a cleaner look
-        self.splash.overrideredirect(True)
+        #self.splash.overrideredirect(True)
         
         # Center on screen
         screen_width = self.splash.winfo_screenwidth()
@@ -33,12 +33,12 @@ class SplashScreen:
         try:
             logo_img = Image.open("images\\logo.png")
             # Resize if needed
-            logo_img = logo_img.resize((300, 300), Image.LANCZOS)
+            logo_img = logo_img.resize((400, 400), Image.LANCZOS)
             logo_photo = ImageTk.PhotoImage(logo_img)
             
             logo_label = Label(content_frame, image=logo_photo, bg="#001839")
             logo_label.image = logo_photo  # Keep a reference
-            logo_label.pack(pady=(50, 20))
+            logo_label.place(relx=0.5, rely=0.5, anchor="center")
         except Exception as e:
             print(f"Error loading logo: {e}")
             # If logo can't be loaded, display text instead
@@ -47,9 +47,9 @@ class SplashScreen:
             logo_label.pack(pady=(80, 20))
         
         # Loading indicator
-        loading_label = Label(content_frame, text="Loading...", font=("Arial", 12), 
-                             bg="#001839", fg="#AAAAAA")
-        loading_label.pack(pady=20)
+        #loading_label = Label(content_frame, text="Loading...", font=("Arial", 12), 
+        #                     bg="#001839", fg="#AAAAAA")
+        #loading_label.pack(pady=5)
     
     def destroy(self):
         self.splash.destroy()
@@ -366,11 +366,11 @@ class CartoonifyApp:
         self.sketch_container.config(highlightbackground="#4CAF50")  # Green highlight
         self.cartoon_container.config(highlightbackground="#FFFFFF")  # Reset cartoon button
 
-        img = cv2.cvtColor(self.original_image.copy(), cv2.COLOR_BGR2GRAY)
-        inv = 255 - img
-        blur = cv2.GaussianBlur(inv, (21, 21), 0)
-        sketch = cv2.divide(img, 255 - blur, scale=256)
+        img_gray = cv2.cvtColor(self.original_image.copy(), cv2.COLOR_BGR2GRAY)
+        sketch = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                    cv2.THRESH_BINARY, 9, 10)
         sketch_bgr = cv2.cvtColor(sketch, cv2.COLOR_GRAY2BGR)
+
 
         self.cartoon_image = sketch_bgr
         self.current_filter = "sketch"
@@ -421,16 +421,8 @@ class CartoonifyApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    
-    # Hide main window initially
-    root.withdraw()
-    
-    # Show splash screen
+    root.withdraw()  # Hide main window initially
+
     splash = SplashScreen(root)
-    
-    # Simulate loading time
-    root.after(3000, splash.destroy)  # Show splash for 3 seconds
-    root.after(2200, root.deiconify)  # Show main window after splash is gone
-    
-    app = CartoonifyApp(root)
+    root.after(3000, lambda: (splash.destroy(), root.deiconify(), CartoonifyApp(root)))
     root.mainloop()
