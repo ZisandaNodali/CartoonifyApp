@@ -4,55 +4,418 @@ import cv2
 from PIL import Image, ImageTk, ImageDraw
 import os
 import time
+import numpy as np
 
-class SplashScreen:
-    def __init__(self, parent):
-        # Create a toplevel window
-        self.splash = Toplevel(parent)
-        self.splash.title("Cartoonify")
-        self.splash.geometry("400x400")
+
+class CartoonifyApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Cartoonify")
+        self.root.geometry("800x600")
+        self.root.configure(bg="#001839")  # Dark blue background
         
-        # Remove window decorations for a cleaner look
-        #self.splash.overrideredirect(True)
+        # Center the window
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - 800) // 2
+        y = (screen_height - 600) // 2
+        self.root.geometry(f"800x600+{x}+{y}")
         
-        # Center on screen
-        screen_width = self.splash.winfo_screenwidth()
-        screen_height = self.splash.winfo_screenheight()
+        self.original_image = None
+        self.cartoon_image = None
+        self.current_filter = None
+        
+        # Start with splash screen
+        self.show_splash_screen()
+    
+    def show_splash_screen(self):
+        # Clear any existing widgets from root
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Configure the whole window as splash
+        self.root.geometry("400x400")
+        
+        # Center the splash window
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
         x = (screen_width - 400) // 2
-        y = (screen_height - 400) // 2
-        self.splash.geometry(f"400x400+{x}+{y}")
+        y = (screen_height - 600) // 2
+        self.root.geometry(f"400x400+{x}+{y}")
         
-        # Configure background
-        self.splash.configure(bg="#001839")
-        
-        # Create a frame for content
-        content_frame = Frame(self.splash, bg="#001839")
-        content_frame.pack(expand=True, fill="both")
+        # Create a frame for the splash content
+        splash_frame = Frame(self.root, bg="#001839")
+        splash_frame.pack(expand=True, fill="both")
         
         # Try to load and display the logo
         try:
             logo_img = Image.open("images\\logo.png")
             # Resize if needed
             logo_img = logo_img.resize((400, 400), Image.LANCZOS)
-            logo_photo = ImageTk.PhotoImage(logo_img)
+            self.logo_photo = ImageTk.PhotoImage(logo_img)
             
-            logo_label = Label(content_frame, image=logo_photo, bg="#001839")
-            logo_label.image = logo_photo  # Keep a reference
+            logo_label = Label(splash_frame, image=self.logo_photo, bg="#001839")
             logo_label.place(relx=0.5, rely=0.5, anchor="center")
         except Exception as e:
             print(f"Error loading logo: {e}")
             # If logo can't be loaded, display text instead
-            logo_label = Label(content_frame, text="Cartoonify", font=("Arial", 30, "bold"), 
+            logo_label = Label(splash_frame, text="Cartoonify", font=("Arial", 30, "bold"), 
                               bg="#001839", fg="white")
             logo_label.pack(pady=(80, 20))
         
-        # Loading indicator
-        #loading_label = Label(content_frame, text="Loading...", font=("Arial", 12), 
-        #                     bg="#001839", fg="#AAAAAA")
-        #loading_label.pack(pady=5)
+        # Schedule transition to main app after delay
+        self.root.after(2000, self.transition_to_main_app)
     
-    def destroy(self):
-        self.splash.destroy()
+    def transition_to_main_app(self):
+        # Animate the transition by gradually expanding the window
+        self.animate_transition(400, 400, 800, 600, steps=10)
+    
+    def animate_transition(self, start_width, start_height, end_width, end_height, steps=10):
+        def resize_step(current_step):
+            if current_step <= steps:
+                # Calculate intermediate size
+                width = start_width + (end_width - start_width) * current_step // steps
+                height = start_height + (end_height - start_height) * current_step // steps
+                
+                # Center the window
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+                x = (screen_width - width) // 2
+                y = (screen_height - height) // 2
+                self.root.geometry(f"{width}x{height}+{x}+{y}")
+                
+                # Schedule next step
+                self.root.after(20, lambda: resize_step(current_step + 1))
+            else:
+                # Transition complete, show main interface
+                self.init_main_interface()
+        
+        # Start the animation
+        resize_step(1)
+    
+    def init_main_interface(self):
+        # Clear any existing widgets from root
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Title label
+        self.title_label = Label(self.root, text="Let's cartoonify your image", font=("Arial", 20), 
+                                bg="#001839", fg="white")
+        self.title_label.pack(pady=20)
+
+        # Create image source buttons frame
+        self.source_frame = Frame(self.root, bg="#001839")
+        self.source_frame.pack(pady=10)
+
+        # Open Image Button
+        self.open_button = Button(self.source_frame, text="Upload Image", command=self.open_image, 
+                                 bg="#1976D2", fg="white", font=("Arial", 12),
+                                 padx=10, pady=5, borderwidth=0)
+        self.open_button.pack(side=tk.LEFT, padx=10)
+
+        # Try to load camera icon for the Camera Button
+        try:
+            camera_img = Image.open("images\\camera_icon.png")
+            camera_img = camera_img.resize((30, 30), Image.LANCZOS)
+            self.camera_photo = ImageTk.PhotoImage(camera_img)
+            
+            self.camera_button = Button(self.source_frame, image=self.camera_photo, command=self.open_camera,
+                                      bg="#1976D2", fg="white", borderwidth=0, padx=10, pady=5)
+        except Exception as e:
+            print(f"Error loading camera icon: {e}")
+            # If camera icon can't be loaded, use text instead
+            self.camera_button = Button(self.source_frame, text="Camera", command=self.open_camera,
+                                      bg="#1976D2", fg="white", font=("Arial", 12),
+                                      padx=10, pady=5, borderwidth=0)
+        
+        self.camera_button.pack(side=tk.LEFT, padx=10)
+
+        # Image display frame (side-by-side with arrow between)
+        self.image_frame = Frame(self.root, bg="#001839")
+        self.image_frame.pack(pady=20)
+
+        # Original image container (white square)
+        self.panel_original = Label(self.image_frame, bg="white", width=25, height=13)
+        self.panel_original.grid(row=0, column=0, padx=10)
+
+        # Arrow between images
+        self.arrow_label = Label(self.image_frame, text="→", font=("Arial", 20, "bold"), 
+                                bg="#001839", fg="white")
+        self.arrow_label.grid(row=0, column=1, padx=10)
+
+        # Cartoonified image container (white square)
+        self.panel_cartoon = Label(self.image_frame, bg="white", width=25, height=13)
+        self.panel_cartoon.grid(row=0, column=2, padx=10)
+
+        # Filter buttons frame
+        self.filter_frame = Frame(self.root, bg="#001839")
+        self.filter_frame.pack(pady=10)
+
+        # Load filter icons
+        try:
+            # Cartoon filter icon - create rounded appearance
+            cartoon_img = Image.open("images\\CartoonFilter.jpg")
+            cartoon_img = cartoon_img.resize((60, 60), Image.LANCZOS)
+            
+            # Create a circular mask
+            mask = Image.new("L", cartoon_img.size, 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, cartoon_img.size[0], cartoon_img.size[1]), fill=255)
+            
+            # Apply mask to create circular image
+            cartoon_circle = Image.new("RGBA", cartoon_img.size)
+            cartoon_circle.paste(cartoon_img, (0, 0), mask)
+            self.cartoon_photo = ImageTk.PhotoImage(cartoon_circle)
+            
+            # Sketch filter icon - create rounded appearance
+            sketch_img = Image.open("images\\SketchFilter.jpg")
+            sketch_img = sketch_img.resize((60, 60), Image.LANCZOS)
+            
+            # Apply same mask for consistency
+            sketch_circle = Image.new("RGBA", sketch_img.size)
+            sketch_circle.paste(sketch_img, (0, 0), mask)
+            self.sketch_photo = ImageTk.PhotoImage(sketch_circle)
+        except Exception as e:
+            # If images can't be loaded, create placeholder colors
+            self.cartoon_photo = None
+            self.sketch_photo = None
+            print(f"Error loading filter icons: {e}")
+
+        # Cartoon filter button with rounded icon
+        self.cartoon_frame = Frame(self.filter_frame, bg="#001839")
+        self.cartoon_frame.grid(row=0, column=0, padx=20)
+        
+        # Create a container frame without visible border initially
+        self.cartoon_container = Frame(self.cartoon_frame, bg="#001839", 
+                                      highlightbackground="#001839", highlightthickness=2, bd=0)
+        self.cartoon_container.pack(pady=5)
+        
+        # Use image if available, otherwise use colored background
+        if hasattr(self, 'cartoon_photo') and self.cartoon_photo:
+            self.cartoon_icon = Label(self.cartoon_container, image=self.cartoon_photo, 
+                                     bg="#001839", borderwidth=0)
+        else:
+            self.cartoon_icon = Label(self.cartoon_container, bg="#FF7043", width=8, height=4, 
+                                     borderwidth=0)
+        
+        self.cartoon_icon.pack()
+        self.cartoon_container.bind("<Button-1>", lambda e: self.cartoonify_image())
+        self.cartoon_icon.bind("<Button-1>", lambda e: self.cartoonify_image())
+        
+        self.cartoon_label = Label(self.cartoon_frame, text="Cartoon", bg="#001839", fg="white", font=("Arial", 10))
+        self.cartoon_label.pack(pady=5)
+
+        # Sketch filter button with rounded icon
+        self.sketch_frame = Frame(self.filter_frame, bg="#001839")
+        self.sketch_frame.grid(row=0, column=1, padx=20)
+        
+        # Create a container frame without visible border initially
+        self.sketch_container = Frame(self.sketch_frame, bg="#001839", 
+                                     highlightbackground="#001839", highlightthickness=2, bd=0)
+        self.sketch_container.pack(pady=5)
+        
+        # Use image if available, otherwise use colored background
+        if hasattr(self, 'sketch_photo') and self.sketch_photo:
+            self.sketch_icon = Label(self.sketch_container, image=self.sketch_photo,
+                                    bg="#001839", borderwidth=0)
+        else:
+            self.sketch_icon = Label(self.sketch_container, bg="#E0E0E0", width=8, height=4, 
+                                    borderwidth=0)
+        
+        self.sketch_icon.pack()
+        self.sketch_container.bind("<Button-1>", lambda e: self.sketch_filter())
+        self.sketch_icon.bind("<Button-1>", lambda e: self.sketch_filter())
+        
+        self.sketch_label = Label(self.sketch_frame, text="Sketch", bg="#001839", fg="white", font=("Arial", 10))
+        self.sketch_label.pack()
+
+        # Winx Club filter button with rounded icon
+        self.winx_frame = Frame(self.filter_frame, bg="#001839")
+        self.winx_frame.grid(row=0, column=2, padx=20)
+
+        self.winx_container = Frame(self.winx_frame, bg="#001839",
+                                    highlightbackground="#001839", highlightthickness=2, bd=0)
+        self.winx_container.pack(pady=5)
+
+        try:
+            winx_img = Image.open("images\\CartoonFilter.jpg")
+            winx_img = winx_img.resize((60, 60), Image.LANCZOS)
+
+            # Create circular mask
+            mask = Image.new("L", winx_img.size, 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, winx_img.size[0], winx_img.size[1]), fill=255)
+
+            winx_circle = Image.new("RGBA", winx_img.size)
+            winx_circle.paste(winx_img, (0, 0), mask)
+            self.winx_photo = ImageTk.PhotoImage(winx_circle)
+
+            self.winx_icon = Label(self.winx_container, image=self.winx_photo, bg="#001839", borderwidth=0)
+        except Exception as e:
+            print(f"Error loading Winx filter icon: {e}")
+            self.winx_icon = Label(self.winx_container, bg="#FFD1DC", width=8, height=4, borderwidth=0)
+
+        self.winx_icon.pack()
+        self.winx_container.bind("<Button-1>", lambda e: self.winxclub_filter())
+        self.winx_icon.bind("<Button-1>", lambda e: self.winxclub_filter())
+
+        self.winx_label = Label(self.winx_frame, text="Winx Club", bg="#001839", fg="white", font=("Arial", 10))
+        self.winx_label.pack()
+
+        # Action buttons frame
+        self.action_frame = Frame(self.root, bg="#001839")
+        self.action_frame.pack(pady=10)
+
+        # Reset button
+        self.reset_button = Button(self.action_frame, text="Reset", command=self.reset_app, 
+                                  bg="#1976D2", fg="white", font=("Arial", 12),
+                                  padx=15, pady=5, borderwidth=0)
+        self.reset_button.grid(row=0, column=0, padx=10)
+
+        # Save button
+        self.save_button = Button(self.action_frame, text="Save", command=self.save_image, 
+                                 bg="#1976D2", fg="white", font=("Arial", 12),
+                                 padx=15, pady=5, borderwidth=0, state='disabled')
+        self.save_button.grid(row=0, column=1, padx=10)
+    
+    def open_camera(self):
+        self.camera_window = CameraWindow(self.root, self.process_camera_image)
+    
+    def process_camera_image(self, image):
+        self.original_image = image
+        self.show_image(image, is_original=True)
+        self.save_button.config(state='normal')
+
+    def open_image(self):
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            image = cv2.imread(file_path)
+            self.original_image = image
+            self.show_image(image, is_original=True)
+            self.save_button.config(state='normal')
+    
+    def show_image(self, cv_img, is_original=True):
+        img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        img_resized = img_pil.resize((250, 250))
+        img_tk = ImageTk.PhotoImage(img_resized)
+
+        if is_original:
+            self.panel_original.configure(image=img_tk, width=250, height=250)
+            self.panel_original.image = img_tk
+        else:
+            self.panel_cartoon.configure(image=img_tk, width=250, height=250)
+            self.panel_cartoon.image = img_tk
+
+    def cartoonify_image(self):
+        if self.original_image is None:
+            messagebox.showerror("Error", "No image loaded.")
+            return
+
+        # Highlight the selected filter button
+        self.cartoon_container.config(highlightbackground="#4CAF50")  # Green highlight
+        self.sketch_container.config(highlightbackground="#001839")   # Reset sketch button
+        self.winx_container.config(highlightbackground="#001839")     # Reset winx button
+
+        img = self.original_image.copy()
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray_blur = cv2.medianBlur(gray, 5)
+        edges = cv2.adaptiveThreshold(gray_blur, 255,
+                                      cv2.ADAPTIVE_THRESH_MEAN_C,
+                                      cv2.THRESH_BINARY, blockSize=9, C=2)
+        color = cv2.bilateralFilter(img, d=9, sigmaColor=250, sigmaSpace=250)
+        cartoon = cv2.bitwise_and(color, color, mask=edges)
+
+        self.cartoon_image = cartoon
+        self.current_filter = "cartoon"
+        self.show_image(cartoon, is_original=False)
+        self.save_button.config(state='normal')
+
+    def sketch_filter(self):
+        if self.original_image is None:
+            messagebox.showerror("Error", "No image loaded.")
+            return
+
+        # Highlight the selected filter button
+        self.sketch_container.config(highlightbackground="#4CAF50")   # Green highlight
+        self.cartoon_container.config(highlightbackground="#001839")  # Reset cartoon button
+        self.winx_container.config(highlightbackground="#001839")     # Reset winx button
+
+        img_gray = cv2.cvtColor(self.original_image.copy(), cv2.COLOR_BGR2GRAY)
+        sketch = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                    cv2.THRESH_BINARY, 9, 10)
+        sketch_bgr = cv2.cvtColor(sketch, cv2.COLOR_GRAY2BGR)
+
+
+        self.cartoon_image = sketch_bgr
+        self.current_filter = "sketch"
+        self.show_image(sketch_bgr, is_original=False)
+        self.save_button.config(state='normal')
+    
+    def winxclub_filter(self):
+        if self.original_image is None:
+            messagebox.showerror("Error", "No image loaded.")
+            return
+
+        # Highlight the selected filter button
+        self.winx_container.config(highlightbackground="#4CAF50")     # Green highlight
+        self.cartoon_container.config(highlightbackground="#001839")  # Reset cartoon button
+        self.sketch_container.config(highlightbackground="#001839")   # Reset sketch button
+
+        # Convert to RGB if it's a NumPy array (OpenCV format)
+        if isinstance(self.original_image, np.ndarray):
+            img = self.original_image.copy()
+        else:
+            img = np.array(self.original_image)
+
+        # Apply a Winx-style dreamy effect using HSV adjustments
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+
+        # Boost saturation and value slightly
+        s = cv2.add(s, 30)
+        v = cv2.add(v, 20)
+
+        hsv_modified = cv2.merge([h, s, v])
+        winx_img = cv2.cvtColor(hsv_modified, cv2.COLOR_HSV2BGR)
+
+        # Display the result
+        self.cartoon_image = winx_img
+        self.current_filter = "winxclub"
+        self.show_image(winx_img, is_original=False)
+        self.save_button.config(state='normal')
+
+    def save_image(self):
+        if self.cartoon_image is not None:
+            file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                    filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
+            if file_path:
+                cv2.imwrite(file_path, self.cartoon_image)
+                messagebox.showinfo("Saved", "Image saved successfully!")
+
+    def reset_app(self):
+        self.original_image = None
+        self.cartoon_image = None
+        self.current_filter = None
+
+        # Clear image displays
+        self.panel_original.configure(image="", width=25, height=13)
+        self.panel_cartoon.configure(image="", width=25, height=13)
+        
+        # Reset image references
+        if hasattr(self.panel_original, 'image'):
+            self.panel_original.image = None
+        if hasattr(self.panel_cartoon, 'image'):
+            self.panel_cartoon.image = None
+            
+        # Reset filter button highlights - make them invisible again
+        self.cartoon_container.config(highlightbackground="#001839")
+        self.sketch_container.config(highlightbackground="#001839")
+        self.winx_container.config(highlightbackground="#001839")
+            
+        # Disable save button
+        self.save_button.config(state='disabled')
+
 
 class CameraWindow:
     def __init__(self, parent, callback):
@@ -147,282 +510,8 @@ class CameraWindow:
         # Close the window
         self.window.destroy()
 
-class CartoonifyApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Cartoonify Image App")
-        self.root.geometry("800x600")
-        self.root.configure(bg="#001839")  # Dark blue background as shown in the image
-
-        self.original_image = None
-        self.cartoon_image = None
-        self.current_filter = None
-
-        # Title label
-        self.title_label = Label(root, text="Let's cartoonify your image", font=("Arial", 20), 
-                                bg="#001839", fg="white")
-        self.title_label.pack(pady=20)
-
-        # Create image source buttons frame first
-        self.source_frame = Frame(root, bg="#001839")
-        self.source_frame.pack(pady=10)
-
-        # Open Image Button
-        self.open_button = Button(self.source_frame, text="Upload Image", command=self.open_image, 
-                                 bg="#1976D2", fg="white", font=("Arial", 12),
-                                 padx=10, pady=5, borderwidth=0)
-        self.open_button.pack(side=tk.LEFT, padx=10)
-
-        # Try to load camera icon for the Camera Button
-        try:
-            camera_img = Image.open("images\\camera_icon.png")
-            camera_img = camera_img.resize((30, 30), Image.LANCZOS)
-            self.camera_photo = ImageTk.PhotoImage(camera_img)
-            
-            self.camera_button = Button(self.source_frame, image=self.camera_photo, command=self.open_camera,
-                                      bg="#1976D2", fg="white", borderwidth=0, padx=10, pady=5)
-        except Exception as e:
-            print(f"Error loading camera icon: {e}")
-            # If camera icon can't be loaded, use text instead
-            self.camera_button = Button(self.source_frame, text="Camera", command=self.open_camera,
-                                      bg="#1976D2", fg="white", font=("Arial", 12),
-                                      padx=10, pady=5, borderwidth=0)
-        
-        self.camera_button.pack(side=tk.LEFT, padx=10)
-
-        # Image display frame (side-by-side with arrow between)
-        self.image_frame = Frame(root, bg="#001839")
-        self.image_frame.pack(pady=20)
-
-        # Original image container (white square)
-        self.panel_original = Label(self.image_frame, bg="white", width=25, height=13)
-        self.panel_original.grid(row=0, column=0, padx=10)
-
-        # Arrow between images
-        self.arrow_label = Label(self.image_frame, text="→", font=("Arial", 20, "bold"), 
-                                bg="#001839", fg="white")
-        self.arrow_label.grid(row=0, column=1, padx=10)
-
-        # Cartoonified image container (white square)
-        self.panel_cartoon = Label(self.image_frame, bg="white", width=25, height=13)
-        self.panel_cartoon.grid(row=0, column=2, padx=10)
-
-        # Filter buttons frame
-        self.filter_frame = Frame(root, bg="#001839")
-        self.filter_frame.pack(pady=10)
-
-        # Load filter icons
-        try:
-            # Cartoon filter icon - create rounded appearance
-            cartoon_img = Image.open("images\\CartoonFilter.jpg")
-            cartoon_img = cartoon_img.resize((60, 60), Image.LANCZOS)
-            
-            # Create a circular mask
-            mask = Image.new("L", cartoon_img.size, 0)
-            draw = ImageDraw.Draw(mask)
-            draw.ellipse((0, 0, cartoon_img.size[0], cartoon_img.size[1]), fill=255)
-            
-            # Apply mask to create circular image
-            cartoon_circle = Image.new("RGBA", cartoon_img.size)
-            cartoon_circle.paste(cartoon_img, (0, 0), mask)
-            self.cartoon_photo = ImageTk.PhotoImage(cartoon_circle)
-            
-            # Sketch filter icon - create rounded appearance
-            sketch_img = Image.open("images\\SketchFilter.jpg")
-            sketch_img = sketch_img.resize((60, 60), Image.LANCZOS)
-            
-            # Apply same mask for consistency
-            sketch_circle = Image.new("RGBA", sketch_img.size)
-            sketch_circle.paste(sketch_img, (0, 0), mask)
-            self.sketch_photo = ImageTk.PhotoImage(sketch_circle)
-        except Exception as e:
-            # If images can't be loaded, create placeholder colors
-            self.cartoon_photo = None
-            self.sketch_photo = None
-            print(f"Error loading filter icons: {e}")
-
-        # Cartoon filter button with rounded icon
-        self.cartoon_frame = Frame(self.filter_frame, bg="#001839")
-        self.cartoon_frame.grid(row=0, column=0, padx=20)
-        
-        # Create a container frame without visible border initially
-        self.cartoon_container = Frame(self.cartoon_frame, bg="#001839", 
-                                      highlightbackground="#001839", highlightthickness=2, bd=0)
-        self.cartoon_container.pack(pady=5)
-        
-        # Use image if available, otherwise use colored background
-        if self.cartoon_photo:
-            self.cartoon_icon = Label(self.cartoon_container, image=self.cartoon_photo, 
-                                     bg="#001839", borderwidth=0)
-        else:
-            self.cartoon_icon = Label(self.cartoon_container, bg="#FF7043", width=8, height=4, 
-                                     borderwidth=0)
-        
-        self.cartoon_icon.pack()
-        self.cartoon_container.bind("<Button-1>", lambda e: self.cartoonify_image())
-        self.cartoon_icon.bind("<Button-1>", lambda e: self.cartoonify_image())
-        
-        self.cartoon_label = Label(self.cartoon_frame, text="Cartoon", bg="#001839", fg="white", font=("Arial", 10))
-        self.cartoon_label.pack(pady=5)
-
-        # Sketch filter button with rounded icon
-        self.sketch_frame = Frame(self.filter_frame, bg="#001839")
-        self.sketch_frame.grid(row=0, column=1, padx=20)
-        
-        # Create a container frame without visible border initially
-        self.sketch_container = Frame(self.sketch_frame, bg="#001839", 
-                                     highlightbackground="#001839", highlightthickness=2, bd=0)
-        self.sketch_container.pack(pady=5)
-        
-        # Use image if available, otherwise use colored background
-        if self.sketch_photo:
-            self.sketch_icon = Label(self.sketch_container, image=self.sketch_photo,
-                                    bg="#001839", borderwidth=0)
-        else:
-            self.sketch_icon = Label(self.sketch_container, bg="#E0E0E0", width=8, height=4, 
-                                    borderwidth=0)
-        
-        self.sketch_icon.pack()
-        self.sketch_container.bind("<Button-1>", lambda e: self.sketch_filter())
-        self.sketch_icon.bind("<Button-1>", lambda e: self.sketch_filter())
-        
-        self.sketch_label = Label(self.sketch_frame, text="Sketch", bg="#001839", fg="white", font=("Arial", 10))
-        self.sketch_label.pack()
-
-        # Action buttons frame
-        self.action_frame = Frame(root, bg="#001839")
-        self.action_frame.pack(pady=10)
-
-        # Reset button
-        self.reset_button = Button(self.action_frame, text="Reset", command=self.reset_app, 
-                                  bg="#1976D2", fg="white", font=("Arial", 12),
-                                  padx=15, pady=5, borderwidth=0)
-        self.reset_button.grid(row=0, column=0, padx=10)
-
-        # Save button
-        self.save_button = Button(self.action_frame, text="Save", command=self.save_image, 
-                                 bg="#1976D2", fg="white", font=("Arial", 12),
-                                 padx=15, pady=5, borderwidth=0, state='disabled')
-        self.save_button.grid(row=0, column=1, padx=10)
-
-    def open_image(self):
-        file_path = filedialog.askopenfilename()
-        if file_path:
-            image = cv2.imread(file_path)
-            self.original_image = image
-            self.show_image(image, is_original=True)
-            self.save_button.config(state='normal')
-    
-    def open_camera(self):
-        self.camera_window = CameraWindow(self.root, self.process_camera_image)
-    
-    def process_camera_image(self, image):
-        self.original_image = image
-        self.show_image(image, is_original=True)
-        self.save_button.config(state='normal')
-
-    def show_image(self, cv_img, is_original=True):
-        img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(img_rgb)
-        img_resized = img_pil.resize((250, 250))
-        img_tk = ImageTk.PhotoImage(img_resized)
-
-        if is_original:
-            self.panel_original.configure(image=img_tk, width=250, height=250)
-            self.panel_original.image = img_tk
-        else:
-            self.panel_cartoon.configure(image=img_tk, width=250, height=250)
-            self.panel_cartoon.image = img_tk
-
-    def cartoonify_image(self):
-        if self.original_image is None:
-            messagebox.showerror("Error", "No image loaded.")
-            return
-
-        # Highlight the selected filter button
-        self.cartoon_container.config(highlightbackground="#4CAF50")  # Green highlight
-        self.sketch_container.config(highlightbackground="#FFFFFF")   # Reset sketch button
-
-        img = self.original_image.copy()
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray_blur = cv2.medianBlur(gray, 5)
-        edges = cv2.adaptiveThreshold(gray_blur, 255,
-                                      cv2.ADAPTIVE_THRESH_MEAN_C,
-                                      cv2.THRESH_BINARY, blockSize=9, C=2)
-        color = cv2.bilateralFilter(img, d=9, sigmaColor=250, sigmaSpace=250)
-        cartoon = cv2.bitwise_and(color, color, mask=edges)
-
-        self.cartoon_image = cartoon
-        self.current_filter = "cartoon"
-        self.show_image(cartoon, is_original=False)
-        self.save_button.config(state='normal')
-
-    def sketch_filter(self):
-        if self.original_image is None:
-            messagebox.showerror("Error", "No image loaded.")
-            return
-
-        # Highlight the selected filter button
-        self.sketch_container.config(highlightbackground="#4CAF50")  # Green highlight
-        self.cartoon_container.config(highlightbackground="#FFFFFF")  # Reset cartoon button
-
-        img_gray = cv2.cvtColor(self.original_image.copy(), cv2.COLOR_BGR2GRAY)
-        sketch = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                    cv2.THRESH_BINARY, 9, 10)
-        sketch_bgr = cv2.cvtColor(sketch, cv2.COLOR_GRAY2BGR)
-
-
-        self.cartoon_image = sketch_bgr
-        self.current_filter = "sketch"
-        self.show_image(sketch_bgr, is_original=False)
-        self.save_button.config(state='normal')
-
-    def oil_paint_filter(self):
-        if self.original_image is None:
-            messagebox.showerror("Error", "No image loaded.")
-            return
-
-        img = cv2.edgePreservingFilter(self.original_image.copy(), flags=2, sigma_s=60, sigma_r=0.4)
-        self.cartoon_image = img
-        self.current_filter = "oil_paint"
-        self.show_image(img, is_original=False)
-        self.save_button.config(state='normal')
-
-    def save_image(self):
-        if self.cartoon_image is not None:
-            file_path = filedialog.asksaveasfilename(defaultextension=".png",
-                                                    filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
-            if file_path:
-                cv2.imwrite(file_path, self.cartoon_image)
-                messagebox.showinfo("Saved", "Image saved successfully!")
-
-    def reset_app(self):
-        self.original_image = None
-        self.cartoon_image = None
-        self.current_filter = None
-
-        # Clear image displays
-        self.panel_original.configure(image="", width=25, height=13)
-        self.panel_cartoon.configure(image="", width=25, height=13)
-        
-        # Reset image references
-        if hasattr(self.panel_original, 'image'):
-            self.panel_original.image = None
-        if hasattr(self.panel_cartoon, 'image'):
-            self.panel_cartoon.image = None
-            
-        # Reset filter button highlights - make them invisible again
-        self.cartoon_container.config(highlightbackground="#001839")
-        self.sketch_container.config(highlightbackground="#001839")
-            
-        # Disable save button
-        self.save_button.config(state='disabled')
-
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.withdraw()  # Hide main window initially
-
-    splash = SplashScreen(root)
-    root.after(3000, lambda: (splash.destroy(), root.deiconify(), CartoonifyApp(root)))
+    app = CartoonifyApp(root)
     root.mainloop()
