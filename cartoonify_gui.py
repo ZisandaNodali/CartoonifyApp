@@ -1,10 +1,13 @@
 import tkinter as tk
-from tkinter import Button, Label, filedialog, messagebox, Frame
+from tkinter import Button, Label, filedialog, messagebox, Frame, Toplevel
 import cv2
 from PIL import Image, ImageTk, ImageDraw
 import os
 import time
 import numpy as np
+import urllib.parse
+import webbrowser
+import requests
 
 
 class CartoonifyApp:
@@ -25,6 +28,8 @@ class CartoonifyApp:
         self.cartoon_image = None
         self.current_filter = None
         self.cap = None  # Camera capture object
+        self.cartoon_image_path = ""
+        self.uploaded_image_url = ""
         
         # Start with splash screen
         self.show_splash_screen()
@@ -279,6 +284,12 @@ class CartoonifyApp:
                                  bg="#1976D2", fg="white", font=("Arial", 12),
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.save_button.grid(row=0, column=1, padx=10)
+        
+        # Share button
+        self.share_button = Button(self.action_frame, text="Share", command=self.open_socials_window, 
+                                 bg="#1976D2", fg="white", font=("Arial", 12),
+                                 padx=15, pady=5, borderwidth=0, state='disabled')
+        self.share_button.grid(row=0, column=2, padx=10)
     
     def init_camera_interface(self):
         # First animate closing the main interface
@@ -372,6 +383,7 @@ class CartoonifyApp:
         # Show the captured image
         self.show_image(self.original_image, is_original=True)
         self.save_button.config(state='normal')
+        self.share_button.config(state='normal')
     
     def release_camera(self):
         # Release the webcam resources
@@ -386,6 +398,7 @@ class CartoonifyApp:
             self.original_image = image
             self.show_image(image, is_original=True)
             self.save_button.config(state='normal')
+            self.share_button.config(state='normal')
     
     def show_image(self, cv_img, is_original=True):
         img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
@@ -423,6 +436,7 @@ class CartoonifyApp:
         self.current_filter = "cartoon"
         self.show_image(cartoon, is_original=False)
         self.save_button.config(state='normal')
+        self.share_button.config(state='normal')
 
     def sketch_filter(self):
         if self.original_image is None:
@@ -444,6 +458,7 @@ class CartoonifyApp:
         self.current_filter = "sketch"
         self.show_image(sketch_bgr, is_original=False)
         self.save_button.config(state='normal')
+        self.share_button.config(state='normal')
     
     def winxclub_filter(self):
         if self.original_image is None:
@@ -477,6 +492,7 @@ class CartoonifyApp:
         self.current_filter = "winxclub"
         self.show_image(winx_img, is_original=False)
         self.save_button.config(state='normal')
+        self.share_button.config(state='normal')
 
     def save_image(self):
         if self.cartoon_image is not None:
@@ -484,12 +500,93 @@ class CartoonifyApp:
                                                     filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
             if file_path:
                 cv2.imwrite(file_path, self.cartoon_image)
+                self.cartoon_image_path = file_path  # Store the path for sharing
                 messagebox.showinfo("Saved", "Image saved successfully!")
+
+    def upload_to_gofile(self, file_path):
+        try:
+            # Get upload servers
+            server_res = requests.get("https://api.gofile.io/servers")
+            if server_res.status_code != 200:
+                raise Exception(f"Failed to get server: {server_res.status_code}")
+
+            server_data = server_res.json()
+            servers = server_data.get("data", {}).get("servers", [])
+            server = servers[0]["name"] if servers else None
+            if not server:
+                raise Exception("No server available from GoFile")
+
+            # Upload image
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                upload_res = requests.post(f"https://{server}.gofile.io/uploadFile", files=files)
+
+            if upload_res.status_code != 200 or not upload_res.content:
+                raise Exception("Empty or bad response from upload endpoint")
+
+            try:
+                upload_data = upload_res.json()
+            except ValueError:
+                raise Exception("Could not decode upload response (not valid JSON)")
+
+            if upload_data.get("status") != "ok":
+                raise Exception(f"Upload failed: {upload_data.get('message')}")
+
+            download_link = upload_data['data']['downloadPage']
+            return download_link
+
+        except Exception as e:
+            messagebox.showerror("Upload Error", f"Something went wrong:\n{e}")
+            return None
+
+    def open_socials_window(self):
+        if not hasattr(self, 'cartoon_image_path') or not self.cartoon_image_path or not os.path.exists(self.cartoon_image_path):
+            # If no saved file, save it first
+            self.save_image()
+            if not hasattr(self, 'cartoon_image_path') or not self.cartoon_image_path:
+                return  # User cancelled save
+
+        # Upload to GoFile and get URL
+        self.uploaded_image_url = self.upload_to_gofile(self.cartoon_image_path)
+        if not self.uploaded_image_url:
+            return
+
+        socials = Toplevel(self.root)
+        socials.title("Share on Socials")
+        socials.geometry("400x280")
+        socials.config(bg="white")
+
+        tk.Label(socials, text="✅ Image uploaded successfully!", font=("Arial", 12), fg="green", bg="white").pack(pady=10)
+        tk.Label(socials, text="Now you can share it on socials:", font=("Arial", 10), bg="white").pack(pady=5)
+
+        Button(socials, text="📤 Share on WhatsApp", command=self.share_on_whatsapp, width=30).pack(pady=5)
+        Button(socials, text="🐦 Share on Twitter", command=self.share_on_twitter, width=30).pack(pady=5)
+        Button(socials, text="📧 Share via Email", command=self.share_via_email, width=30).pack(pady=5)
+
+    def share_on_whatsapp(self):
+        if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            message = f"Check out this cartoon image I made! 🤩 {self.uploaded_image_url}"
+            url = "https://web.whatsapp.com/send?text=" + urllib.parse.quote(message)
+            webbrowser.open(url)
+
+    def share_on_twitter(self):
+        if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            message = f"Just cartoonified my photo! 😎 Check it out: {self.uploaded_image_url} #CartoonifyApp"
+            url = "https://twitter.com/intent/tweet?text=" + urllib.parse.quote(message)
+            webbrowser.open(url)
+
+    def share_via_email(self):
+        if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            subject = urllib.parse.quote("Cartoonified Image!")
+            body = urllib.parse.quote(f"Hey! Check out this cartoon image I created using CartoonifyApp:\n{self.uploaded_image_url}")
+            webbrowser.open(f"mailto:?subject={subject}&body={body}")
 
     def reset_app(self):
         self.original_image = None
         self.cartoon_image = None
         self.current_filter = None
+        self.cartoon_image_path = ""
+        self.uploaded_image_url = ""
 
         # Clear image displays
         self.panel_original.configure(image="", width=25, height=13)
@@ -506,8 +603,9 @@ class CartoonifyApp:
         self.sketch_container.config(highlightbackground="#001839")
         self.winx_container.config(highlightbackground="#001839")
             
-        # Disable save button
+        # Disable save and share buttons
         self.save_button.config(state='disabled')
+        self.share_button.config(state='disabled')
 
 
 if __name__ == "__main__":
