@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import Button, Label, filedialog, messagebox, Frame, Toplevel
+from tkinter import Button, Label, filedialog, messagebox, Frame
 import cv2
 from PIL import Image, ImageTk, ImageDraw
 import os
@@ -24,6 +24,7 @@ class CartoonifyApp:
         self.original_image = None
         self.cartoon_image = None
         self.current_filter = None
+        self.cap = None  # Camera capture object
         
         # Start with splash screen
         self.show_splash_screen()
@@ -40,7 +41,7 @@ class CartoonifyApp:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - 400) // 2
-        y = (screen_height - 600) // 2
+        y = (screen_height - 400) // 2
         self.root.geometry(f"400x400+{x}+{y}")
         
         # Create a frame for the splash content
@@ -64,13 +65,13 @@ class CartoonifyApp:
             logo_label.pack(pady=(80, 20))
         
         # Schedule transition to main app after delay
-        self.root.after(2000, self.transition_to_main_app)
+        self.root.after(3000, self.transition_to_main_app)
     
     def transition_to_main_app(self):
         # Animate the transition by gradually expanding the window
-        self.animate_transition(400, 400, 800, 600, steps=10)
+        self.animate_transition(400, 400, 800, 600, steps=10, target_interface=self.init_main_interface)
     
-    def animate_transition(self, start_width, start_height, end_width, end_height, steps=10):
+    def animate_transition(self, start_width, start_height, end_width, end_height, steps=10, target_interface=None):
         def resize_step(current_step):
             if current_step <= steps:
                 # Calculate intermediate size
@@ -87,8 +88,9 @@ class CartoonifyApp:
                 # Schedule next step
                 self.root.after(20, lambda: resize_step(current_step + 1))
             else:
-                # Transition complete, show main interface
-                self.init_main_interface()
+                # Transition complete, show target interface
+                if target_interface:
+                    target_interface()
         
         # Start the animation
         resize_step(1)
@@ -119,12 +121,12 @@ class CartoonifyApp:
             camera_img = camera_img.resize((30, 30), Image.LANCZOS)
             self.camera_photo = ImageTk.PhotoImage(camera_img)
             
-            self.camera_button = Button(self.source_frame, image=self.camera_photo, command=self.open_camera,
+            self.camera_button = Button(self.source_frame, image=self.camera_photo, command=self.init_camera_interface,
                                       bg="#1976D2", fg="white", borderwidth=0, padx=10, pady=5)
         except Exception as e:
             print(f"Error loading camera icon: {e}")
             # If camera icon can't be loaded, use text instead
-            self.camera_button = Button(self.source_frame, text="Camera", command=self.open_camera,
+            self.camera_button = Button(self.source_frame, text="Camera", command=self.init_camera_interface,
                                       bg="#1976D2", fg="white", font=("Arial", 12),
                                       padx=10, pady=5, borderwidth=0)
         
@@ -278,13 +280,104 @@ class CartoonifyApp:
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.save_button.grid(row=0, column=1, padx=10)
     
-    def open_camera(self):
-        self.camera_window = CameraWindow(self.root, self.process_camera_image)
+    def init_camera_interface(self):
+        # First animate closing the main interface
+        self.animate_transition(800, 600, 680, 520, steps=10, target_interface=self.show_camera_interface)
     
-    def process_camera_image(self, image):
-        self.original_image = image
-        self.show_image(image, is_original=True)
+    def show_camera_interface(self):
+        # Clear any existing widgets from root
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        
+        # Configure camera window
+        self.root.title("Camera")
+        
+        # Add a title
+        title_label = Label(self.root, text="Camera Preview", font=("Arial", 16), bg="#001839", fg="white")
+        title_label.pack(pady=10)
+        
+        # Camera preview frame
+        self.camera_frame = Label(self.root, bg="black", width=640, height=480)
+        self.camera_frame.pack(pady=10)
+        
+        # Buttons frame
+        buttons_frame = Frame(self.root, bg="#001839")
+        buttons_frame.pack(pady=10)
+        
+        # Capture button
+        self.capture_button = Button(buttons_frame, text="Capture", command=self.capture_image,
+                                    bg="#1976D2", fg="white", font=("Arial", 12),
+                                    padx=15, pady=5, borderwidth=0)
+        self.capture_button.pack(side=tk.LEFT, padx=10)
+        
+        # Cancel button
+        self.cancel_button = Button(buttons_frame, text="Cancel", command=self.return_to_main,
+                                   bg="#757575", fg="white", font=("Arial", 12),
+                                   padx=15, pady=5, borderwidth=0)
+        self.cancel_button.pack(side=tk.LEFT, padx=10)
+        
+        # Initialize webcam
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            messagebox.showerror("Error", "Could not open webcam. Please check your camera connection.")
+            self.return_to_main()
+            return
+            
+        # Set camera resolution
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
+        # Start video feed
+        self.update_cam()
+    
+    def update_cam(self):
+        # Check if we're still in camera mode
+        if not hasattr(self, 'camera_frame') or not self.cap or not self.cap.isOpened():
+            return
+            
+        # Get a frame from the webcam
+        ret, frame = self.cap.read()
+        if ret:
+            # Convert frame to format tkinter can display
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame_rgb)
+            img_tk = ImageTk.PhotoImage(image=img)
+            
+            # Update the label
+            self.camera_frame.configure(image=img_tk)
+            self.camera_frame.image = img_tk
+            
+            # Store the current frame
+            self.current_frame = frame
+            
+        # Schedule the next update
+        self.root.after(10, self.update_cam)
+    
+    def capture_image(self):
+        # Capture the current frame
+        if hasattr(self, 'current_frame'):
+            # Save the frame as image
+            self.original_image = self.current_frame.copy()
+            self.release_camera()  # Release camera resources
+            # Transition back to main interface
+            self.animate_transition(680, 520, 800, 600, steps=10, target_interface=self.return_to_main_with_image)
+    
+    def return_to_main(self):
+        self.release_camera()  # Release camera resources
+        # Transition back to main interface
+        self.animate_transition(680, 520, 800, 600, steps=10, target_interface=self.init_main_interface)
+    
+    def return_to_main_with_image(self):
+        self.init_main_interface()  # Set up the main interface
+        # Show the captured image
+        self.show_image(self.original_image, is_original=True)
         self.save_button.config(state='normal')
+    
+    def release_camera(self):
+        # Release the webcam resources
+        if hasattr(self, 'cap') and self.cap and self.cap.isOpened():
+            self.cap.release()
+            self.cap = None
 
     def open_image(self):
         file_path = filedialog.askopenfilename()
@@ -415,100 +508,6 @@ class CartoonifyApp:
             
         # Disable save button
         self.save_button.config(state='disabled')
-
-
-class CameraWindow:
-    def __init__(self, parent, callback):
-        self.parent = parent
-        self.callback = callback
-        
-        # Create camera window
-        self.window = Toplevel(parent)
-        self.window.title("Camera")
-        self.window.geometry("680x520")
-        self.window.configure(bg="#001839")
-        
-        # Center on screen
-        screen_width = self.window.winfo_screenwidth()
-        screen_height = self.window.winfo_screenheight()
-        x = (screen_width - 680) // 2
-        y = (screen_height - 520) // 2
-        self.window.geometry(f"680x520+{x}+{y}")
-        
-        # Add a title
-        title_label = Label(self.window, text="Camera Preview", font=("Arial", 16), bg="#001839", fg="white")
-        title_label.pack(pady=10)
-        
-        # Camera preview frame
-        self.camera_frame = Label(self.window, bg="black", width=640, height=480)
-        self.camera_frame.pack(pady=10)
-        
-        # Buttons frame
-        buttons_frame = Frame(self.window, bg="#001839")
-        buttons_frame.pack(pady=10)
-        
-        # Capture button
-        self.capture_button = Button(buttons_frame, text="Capture", command=self.capture_image,
-                                    bg="#1976D2", fg="white", font=("Arial", 12),
-                                    padx=15, pady=5, borderwidth=0)
-        self.capture_button.pack(side=tk.LEFT, padx=10)
-        
-        # Cancel button
-        self.cancel_button = Button(buttons_frame, text="Cancel", command=self.close_camera,
-                                   bg="#757575", fg="white", font=("Arial", 12),
-                                   padx=15, pady=5, borderwidth=0)
-        self.cancel_button.pack(side=tk.LEFT, padx=10)
-        
-        # Initialize webcam
-        self.cap = cv2.VideoCapture(0)
-        if not self.cap.isOpened():
-            messagebox.showerror("Error", "Could not open webcam. Please check your camera connection.")
-            self.window.destroy()
-            return
-            
-        # Set camera resolution
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        
-        # Start video feed
-        self.update_cam()
-        
-        # Set up window close handler
-        self.window.protocol("WM_DELETE_WINDOW", self.close_camera)
-        
-    def update_cam(self):
-        # Get a frame from the webcam
-        ret, frame = self.cap.read()
-        if ret:
-            # Convert frame to format tkinter can display
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(frame_rgb)
-            img_tk = ImageTk.PhotoImage(image=img)
-            
-            # Update the label
-            self.camera_frame.configure(image=img_tk)
-            self.camera_frame.image = img_tk
-            
-            # Store the current frame
-            self.current_frame = frame
-            
-        # Schedule the next update
-        self.window.after(10, self.update_cam)
-    
-    def capture_image(self):
-        # Capture the current frame
-        if hasattr(self, 'current_frame'):
-            # Save the frame as image
-            self.callback(self.current_frame)
-            self.close_camera()
-    
-    def close_camera(self):
-        # Release the webcam
-        if hasattr(self, 'cap') and self.cap.isOpened():
-            self.cap.release()
-        
-        # Close the window
-        self.window.destroy()
 
 
 if __name__ == "__main__":
