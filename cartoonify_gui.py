@@ -3,11 +3,10 @@ from tkinter import Button, Label, filedialog, messagebox, Frame, Toplevel
 import cv2
 from PIL import Image, ImageTk, ImageDraw
 import os
-import time
-import numpy as np
 import urllib.parse
 import webbrowser
 import requests
+import numpy as np
 
 
 class CartoonifyApp:
@@ -30,6 +29,11 @@ class CartoonifyApp:
         self.cap = None  # Camera capture object
         self.cartoon_image_path = ""
         self.uploaded_image_url = ""
+        
+        # Load OpenCV's face detector
+        self.face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        )
         
         # Start with splash screen
         self.show_splash_screen()
@@ -153,6 +157,11 @@ class CartoonifyApp:
         # Cartoonified image container (white square)
         self.panel_cartoon = Label(self.image_frame, bg="white", width=25, height=13)
         self.panel_cartoon.grid(row=0, column=2, padx=10)
+
+        # Beauty rating label (initially empty)
+        self.beauty_label = Label(self.image_frame, text="", font=("Arial", 12), 
+                                 bg="#001839", fg="white")
+        self.beauty_label.grid(row=1, column=0, columnspan=3, pady=10)
 
         # Filter buttons frame
         self.filter_frame = Frame(self.root, bg="#001839")
@@ -384,6 +393,8 @@ class CartoonifyApp:
         self.show_image(self.original_image, is_original=True)
         self.save_button.config(state='normal')
         self.share_button.config(state='normal')
+        # Analyze the face for beauty rating
+        self.analyze_face()
     
     def release_camera(self):
         # Release the webcam resources
@@ -399,6 +410,56 @@ class CartoonifyApp:
             self.show_image(image, is_original=True)
             self.save_button.config(state='normal')
             self.share_button.config(state='normal')
+            # Analyze the face for beauty rating
+            self.analyze_face()
+    
+    def analyze_face(self):
+        if self.original_image is None:
+            return
+        
+        gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+        faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
+        
+        if len(faces) == 0:
+            self.beauty_label.config(text="No face detected", fg="red")
+            return
+        
+        # Get the first face
+        (x, y, w, h) = faces[0]
+        img_height, img_width = gray.shape
+        
+        # Calculate face position (center of image = ideal)
+        face_center_x = x + w/2
+        face_center_y = y + h/2
+        
+        # Score 1: How centered the face is (0-1)
+        center_score = 1 - (abs(face_center_x/img_width - 0.5) + abs(face_center_y/img_height - 0.5))
+        
+        # Score 2: Face size ratio (ideal ~30% of image area)
+        face_ratio = (w * h) / (img_width * img_height)
+        size_score = min(1, max(0, face_ratio / 0.3))  # Normalize to 0-1
+        
+        # Combine scores (60% centering, 40% size)
+        beauty_score = int((center_score * 0.6 + size_score * 0.4) * 100)
+        
+        # Rating text
+        if beauty_score >= 85:
+            rating = "Gorgeous! 😍"
+            color = "#4CAF50"  # Green
+        elif beauty_score >= 70:
+            rating = "Beautiful! 😊"
+            color = "#8BC34A"  # Light green
+        elif beauty_score >= 50:
+            rating = "Pretty! 🙂"
+            color = "#FFC107"  # Yellow
+        else:
+            rating = "Average"
+            color = "#FF9800"  # Orange
+        
+        self.beauty_label.config(
+            text=f"Beauty Rating: {beauty_score}% - {rating}", 
+            fg=color
+        )
     
     def show_image(self, cv_img, is_original=True):
         img_rgb = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
@@ -606,6 +667,9 @@ class CartoonifyApp:
         # Disable save and share buttons
         self.save_button.config(state='disabled')
         self.share_button.config(state='disabled')
+        
+        # Clear beauty rating
+        self.beauty_label.config(text="")
 
 
 if __name__ == "__main__":
