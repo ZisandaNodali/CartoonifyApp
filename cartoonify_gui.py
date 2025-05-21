@@ -145,6 +145,12 @@ class CartoonifyApp:
         self.image_frame = Frame(self.root, bg="#001839")
         self.image_frame.pack(pady=20)
 
+         # ...........................Estimate Age Button..............................
+        self.age_button = Button(self.source_frame, text="Estimate Age", command=self.estimate_age,
+                         bg="#1976D2", fg="white", font=("Arial", 12),
+                         padx=10, pady=5, borderwidth=0)
+        self.age_button.pack(side=tk.LEFT, padx=10)
+
         # Original image container (white square)
         self.panel_original = Label(self.image_frame, bg="white", width=25, height=13)
         self.panel_original.grid(row=0, column=0, padx=10)
@@ -412,6 +418,53 @@ class CartoonifyApp:
             self.share_button.config(state='normal')
             # Analyze the face for beauty rating
             self.analyze_face()
+
+             #.................ESTIMATE AGE..........................
+
+    def estimate_age(self):
+        if self.original_image is None:
+            print("No image loaded.")
+            return
+
+        # Convert PIL image to OpenCV format
+        cv_image = cv2.cvtColor(np.array(self.original_image), cv2.COLOR_RGB2BGR)
+
+        # Detect faces
+        gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+
+        if len(faces) == 0:
+            print("No faces detected.")
+            return
+
+        # For simplicity, use the first face
+        (x, y, w, h) = faces[0]
+        face_img = cv_image[y:y+h, x:x+w]
+
+        # Fake age estimate (placeholder)
+        estimated_age = self.mock_age_estimator(face_img)
+
+        # Draw age label on image
+        labeled_img = cv_image.copy()
+        cv2.putText(labeled_img, f"Age: {estimated_age}", (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+        cv2.rectangle(labeled_img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # Convert back to PIL and show in original panel
+        labeled_img_rgb = cv2.cvtColor(labeled_img, cv2.COLOR_BGR2RGB)
+        labeled_pil = Image.fromarray(labeled_img_rgb)
+        self.display_image_on_panel(labeled_pil, self.panel_original)
+
+    def mock_age_estimator(self, face_image):
+        # Placeholder function for demo purposes
+        import random
+        return random.randint(18, 60)
+
+    def display_image_on_panel(self, image, panel):
+        image_resized = image.resize((300, 250), Image.LANCZOS)
+        photo = ImageTk.PhotoImage(image_resized)
+        panel.configure(image=photo)
+        panel.image = photo  # Keep a reference
     
     def analyze_face(self):
         if self.original_image is None:
