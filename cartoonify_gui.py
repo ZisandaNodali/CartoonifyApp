@@ -457,7 +457,7 @@ class CartoonifyApp:
             color = "#FF9800"  # Orange
         
         self.beauty_label.config(
-            text=f"Beauty Rating: {beauty_score}% - {rating}", 
+            text=f"Quality Rating: {beauty_score}% - {rating}", 
             fg=color
         )
     
@@ -638,10 +638,28 @@ class CartoonifyApp:
 
     def share_via_email(self):
         if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
-            subject = urllib.parse.quote("Cartoonified Image!")
-            body = urllib.parse.quote(f"Hey! Check out this cartoon image I created using CartoonifyApp:\n{self.uploaded_image_url}")
-            webbrowser.open(f"mailto:?subject={subject}&body={body}")
+            subject = urllib.parse.quote("Check out my Cartoonified Image! 🎨")
+            
+            # Plain text format that works better with email clients
+            plain_body = f"""Hey there! 👋
 
+    I just created this awesome cartoon image using CartoonifyApp and wanted to share it with you!
+
+    🔗 VIEW MY CARTOON IMAGE:
+    {self.uploaded_image_url}
+
+    👆 Just click the link above to see it!
+
+    (If the link doesn't work, copy and paste it into your browser)
+
+    Hope you like it! 😊
+
+    ---
+    Created with CartoonifyApp"""
+            
+            body = urllib.parse.quote(plain_body)
+            webbrowser.open(f"mailto:?subject={subject}&body={body}")
+            
     def reset_app(self):
         self.original_image = None
         self.cartoon_image = None
