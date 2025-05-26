@@ -7,7 +7,7 @@ import urllib.parse
 import webbrowser
 import requests
 import numpy as np
-
+from tkinter import ttk
 
 class CartoonifyApp:
     def __init__(self, root):
@@ -26,6 +26,7 @@ class CartoonifyApp:
         self.original_image = None
         self.cartoon_image = None
         self.current_filter = None
+        self.selected_filter = None
         self.cap = None  # Camera capture object
         self.cartoon_image_path = ""
         self.uploaded_image_url = ""
@@ -222,7 +223,7 @@ class CartoonifyApp:
         
         self.cartoon_icon.pack()
         self.cartoon_container.bind("<Button-1>", lambda e: self.cartoonify_image())
-        self.cartoon_icon.bind("<Button-1>", lambda e: self.cartoonify_image())
+        self.cartoon_icon.bind("<Button-1>", lambda e: self.show_loading_bar(self.cartoonify_image))
         
         self.cartoon_label = Label(self.cartoon_frame, text="Cartoon", bg="#001839", fg="white", font=("Arial", 10))
         self.cartoon_label.pack(pady=5)
@@ -246,7 +247,7 @@ class CartoonifyApp:
         
         self.sketch_icon.pack()
         self.sketch_container.bind("<Button-1>", lambda e: self.sketch_filter())
-        self.sketch_icon.bind("<Button-1>", lambda e: self.sketch_filter())
+        self.sketch_icon.bind("<Button-1>", lambda e: self.show_loading_bar(self.sketch_filter))
         
         self.sketch_label = Label(self.sketch_frame, text="Sketch", bg="#001839", fg="white", font=("Arial", 10))
         self.sketch_label.pack()
@@ -279,7 +280,7 @@ class CartoonifyApp:
 
         self.winx_icon.pack()
         self.winx_container.bind("<Button-1>", lambda e: self.winxclub_filter())
-        self.winx_icon.bind("<Button-1>", lambda e: self.winxclub_filter())
+        self.winx_icon.bind("<Button-1>", lambda e: self.show_loading_bar(self.winxclub_filter))
 
         self.winx_label = Label(self.winx_frame, text="Winx Club", bg="#001839", fg="white", font=("Arial", 10))
         self.winx_label.pack()
@@ -305,7 +306,49 @@ class CartoonifyApp:
                                  bg="#1976D2", fg="white", font=("Arial", 12),
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.share_button.grid(row=0, column=2, padx=10)
-    
+
+        # Add progress bar (initially hidden)
+        self.progress_bar = ttk.Progressbar(self.root, mode='indeterminate', length=300)
+
+    def show_loading_bar(self, after_callback=None):
+        self.progress_bar.place(relx=0.5, rely=0.95, anchor='center')
+        self.progress_bar.start(10)
+        if after_callback:
+            self.root.after(3000, lambda: [self.hide_loading_bar(), after_callback()])
+        else:
+            self.root.after(3000, self.hide_loading_bar)
+    def on_filter_selected(self, filter_name):
+        self.selected_filter = filter_name
+        self.show_loading_bar()
+        # After 3 seconds, apply the filter
+        self.root.after(3000, self.apply_selected_filter)
+
+    def hide_loading_bar(self):
+        self.progress_bar.stop()
+        self.progress_bar.place_forget()
+   
+    def apply_selected_filter(self):
+        self.hide_loading_bar()
+
+        if self.original_image is None or self.selected_filter is None:
+            return
+
+        if self.selected_filter == 'cartoon':
+            filtered = self.cartoonify_image(process_only=True)
+        elif self.selected_filter == 'sketch':
+            filtered = self.sketch_filter(process_only=True)
+        elif self.selected_filter == 'winxclub':
+            filtered = self.winxclub_filter(process_only=True)
+        else:
+            return
+
+        # Show filtered image on panel_cartoon
+        self.display_filtered_image(filtered)
+
+    def hide_loading_bar(self):
+        self.progress_bar.stop()
+        self.progress_bar.place_forget()
+
     def init_camera_interface(self):
         # First animate closing the main interface
         self.animate_transition(800, 600, 680, 520, steps=10, target_interface=self.show_camera_interface)
