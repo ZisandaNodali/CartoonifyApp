@@ -1,13 +1,14 @@
 import tkinter as tk
 from tkinter import Button, Label, filedialog, messagebox, Frame, Toplevel
 import cv2
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageTk, ImageDraw, ImageFilter, ImageEnhance
 import os
 import urllib.parse
 import webbrowser
 import requests
 import numpy as np
 from tkinter import ttk
+import random
 
 class CartoonifyApp:
     def __init__(self, root):
@@ -261,7 +262,7 @@ class CartoonifyApp:
         self.winx_container.pack(pady=5)
 
         try:
-            winx_img = Image.open("images\\CartoonFilter.jpg")
+            winx_img = Image.open("images\\WinxFilter.png")
             winx_img = winx_img.resize((60, 60), Image.LANCZOS)
 
             # Create circular mask
@@ -282,8 +283,42 @@ class CartoonifyApp:
         self.winx_container.bind("<Button-1>", lambda e: self.winxclub_filter())
         self.winx_icon.bind("<Button-1>", lambda e: self.show_loading_bar(self.winxclub_filter))
 
-        self.winx_label = Label(self.winx_frame, text="Winx Club", bg="#001839", fg="white", font=("Arial", 10))
+        self.winx_label = Label(self.winx_frame, text="Winx", bg="#001839", fg="white", font=("Arial", 10))
         self.winx_label.pack()
+
+        # Clone filter button with rounded icon
+        self.clone_frame = Frame(self.filter_frame, bg="#001839")
+        self.clone_frame.grid(row=0, column=3, padx=20)
+
+        self.clone_container = Frame(self.clone_frame, bg="#001839",
+                                    highlightbackground="#001839", highlightthickness=2, bd=0)
+        self.clone_container.pack(pady=5)
+
+        try:
+            # Load Clone filter icon and create rounded appearance
+            clone_img = Image.open("images\\CloneFilter.jpg")
+            clone_img = clone_img.resize((60, 60), Image.LANCZOS)
+
+            # Reuse the circular mask from earlier
+            mask = Image.new("L", clone_img.size, 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, clone_img.size[0], clone_img.size[1]), fill=255)
+
+            clone_circle = Image.new("RGBA", clone_img.size)
+            clone_circle.paste(clone_img, (0, 0), mask)
+            self.clone_photo = ImageTk.PhotoImage(clone_circle)
+
+            self.clone_icon = Label(self.clone_container, image=self.clone_photo, bg="#001839", borderwidth=0)
+        except Exception as e:
+            print(f"Error loading Clone filter icon: {e}")
+            self.clone_icon = Label(self.clone_container, bg="#FF00FF", width=8, height=4, borderwidth=0)
+
+        self.clone_icon.pack()
+        self.clone_container.bind("<Button-1>", lambda e: self.clone_filter())
+        self.clone_icon.bind("<Button-1>", lambda e: self.show_loading_bar(self.clone_filter))
+
+        self.clone_label = Label(self.clone_frame, text="Clone", bg="#001839", fg="white", font=("Arial", 10))
+        self.clone_label.pack()
 
         # Action buttons frame
         self.action_frame = Frame(self.root, bg="#001839")
@@ -317,6 +352,7 @@ class CartoonifyApp:
             self.root.after(3000, lambda: [self.hide_loading_bar(), after_callback()])
         else:
             self.root.after(3000, self.hide_loading_bar)
+
     def on_filter_selected(self, filter_name):
         self.selected_filter = filter_name
         self.show_loading_bar()
@@ -339,6 +375,8 @@ class CartoonifyApp:
             filtered = self.sketch_filter(process_only=True)
         elif self.selected_filter == 'winxclub':
             filtered = self.winxclub_filter(process_only=True)
+        elif self.selected_filter == 'clone':
+            filtered = self.clone_filter(process_only=True)
         else:
             return
 
@@ -579,6 +617,7 @@ class CartoonifyApp:
         self.cartoon_container.config(highlightbackground="#4CAF50")  # Green highlight
         self.sketch_container.config(highlightbackground="#001839")   # Reset sketch button
         self.winx_container.config(highlightbackground="#001839")     # Reset winx button
+        self.clone_container.config(highlightbackground="#001839")     # Reset clone button
 
         img = self.original_image.copy()
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -604,6 +643,7 @@ class CartoonifyApp:
         self.sketch_container.config(highlightbackground="#4CAF50")   # Green highlight
         self.cartoon_container.config(highlightbackground="#001839")  # Reset cartoon button
         self.winx_container.config(highlightbackground="#001839")     # Reset winx button
+        self.clone_container.config(highlightbackground="#001839")     # Reset clone button
 
         img_gray = cv2.cvtColor(self.original_image.copy(), cv2.COLOR_BGR2GRAY)
         sketch = cv2.adaptiveThreshold(img_gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
@@ -626,6 +666,7 @@ class CartoonifyApp:
         self.winx_container.config(highlightbackground="#4CAF50")     # Green highlight
         self.cartoon_container.config(highlightbackground="#001839")  # Reset cartoon button
         self.sketch_container.config(highlightbackground="#001839")   # Reset sketch button
+        self.clone_container.config(highlightbackground="#001839")     # Reset clone button
 
         # Convert to RGB if it's a NumPy array (OpenCV format)
         if isinstance(self.original_image, np.ndarray):
@@ -650,6 +691,188 @@ class CartoonifyApp:
         self.show_image(winx_img, is_original=False)
         self.save_button.config(state='normal')
         self.share_button.config(state='normal')
+
+    def clone_filter(self):
+        """Apply clone filter effect with multiple copies of the person"""
+        if not hasattr(self, 'original_image') or self.original_image is None:
+            print("No image loaded")
+            return
+        
+        try:
+            # Highlight the selected filter button
+            self.clone_container.config(highlightbackground="#4CAF50")     # Green highlight
+            self.cartoon_container.config(highlightbackground="#001839")  # Reset cartoon button
+            self.sketch_container.config(highlightbackground="#001839")   # Reset sketch button
+            self.winx_container.config(highlightbackground="#001839")     # Reset winx button
+            
+            # Convert PIL to OpenCV format
+            if isinstance(self.original_image, np.ndarray):
+                cv_image = self.original_image.copy()
+            else:
+                cv_image = cv2.cvtColor(np.array(self.original_image), cv2.COLOR_RGB2BGR)
+            
+            height, width = cv_image.shape[:2]
+            
+            # Create a larger canvas to fit multiple clones
+            canvas_width = int(width * 1.3)
+            canvas_height = int(height * 1.1)
+            canvas = np.zeros((canvas_height, canvas_width, 3), dtype=np.uint8)
+            
+            # Fill canvas with a simple background color (you can modify this)
+            canvas[:] = [20, 20, 40]  # Dark blue background
+            
+            # Use simple background subtraction for person detection
+            # Convert to grayscale for processing
+            gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+            
+            # Create a simple mask by assuming the person is in the center area
+            # This is a simplified approach - for better results, you'd use ML models
+            mask = np.zeros(gray.shape, dtype=np.uint8)
+            
+            # Create a rough person mask using edge detection and morphology
+            edges = cv2.Canny(gray, 50, 150)
+            
+            # Use morphological operations to create a person-like shape
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+            edges = cv2.morphologyEx(edges, cv2.MORPH_DILATE, kernel, iterations=3)
+            
+            # Find the largest contour (assuming it's the person)
+            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            if contours:
+                # Get the largest contour
+                largest_contour = max(contours, key=cv2.contourArea)
+                
+                # Create mask from the largest contour
+                cv2.fillPoly(mask, [largest_contour], 255)
+                
+                # Smooth the mask
+                mask = cv2.GaussianBlur(mask, (5, 5), 0)
+            else:
+                # Fallback: use center region as person
+                center_x, center_y = width // 2, height // 2
+                cv2.ellipse(mask, (center_x, center_y), (width//3, height//2), 0, 0, 360, 255, -1)
+            
+            # Extract the person using the mask
+            person_masked = cv_image.copy()
+            mask_3channel = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR) / 255.0
+            person_masked = (person_masked * mask_3channel).astype(np.uint8)
+            
+            # Define positions for clones
+            clone_positions = [
+                (canvas_width//2 - width//2, canvas_height//2 - height//2),  # Center (original)
+                (50, canvas_height//2 - height//2),                         # Left
+                (canvas_width - width - 50, canvas_height//2 - height//2),  # Right
+            ]
+            
+            # Add some variation to clone positions
+            if canvas_height > height + 100:
+                clone_positions.extend([
+                    (canvas_width//4 - width//4, 20),                       # Top left
+                    (3*canvas_width//4 - width//4, 20),                     # Top right
+                ])
+            
+            # Place clones on canvas
+            for i, (x, y) in enumerate(clone_positions):
+                if x >= 0 and y >= 0 and x + width <= canvas_width and y + height <= canvas_height:
+                    
+                    # Create a slight variation for each clone
+                    clone_img = person_masked.copy()
+                    current_mask = mask.copy()  # Keep track of current mask
+                    
+                    if i > 0:  # Don't modify the center/original
+                        # Add slight color variations
+                        hsv = cv2.cvtColor(clone_img, cv2.COLOR_BGR2HSV)
+                        
+                        # Vary hue slightly
+                        hue_shift = random.randint(-20, 20)
+                        hsv[:, :, 0] = cv2.add(hsv[:, :, 0], hue_shift)
+                        
+                        # Vary saturation
+                        sat_mult = random.uniform(0.8, 1.2)
+                        hsv[:, :, 1] = cv2.multiply(hsv[:, :, 1], sat_mult)
+                        
+                        clone_img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+                        
+                        # Slightly scale some clones
+                        if i % 2 == 0:
+                            scale_factor = random.uniform(0.9, 1.1)
+                            new_width = int(width * scale_factor)
+                            new_height = int(height * scale_factor)
+                            
+                            # Resize both the image and mask together
+                            clone_img = cv2.resize(clone_img, (new_width, new_height))
+                            current_mask = cv2.resize(current_mask, (new_width, new_height))
+                            
+                            # Adjust position to center the scaled clone
+                            x_offset = (width - new_width) // 2
+                            y_offset = (height - new_height) // 2
+                            x += x_offset
+                            y += y_offset
+                            
+                            # Update dimensions for placement
+                            width_to_use = new_width
+                            height_to_use = new_height
+                        else:
+                            width_to_use = width
+                            height_to_use = height
+                    else:
+                        width_to_use = width
+                        height_to_use = height
+                    
+                    # Ensure clone fits in canvas - fix boundary checking
+                    if x < 0:
+                        x = 0
+                    if y < 0:
+                        y = 0
+                        
+                    end_x = min(canvas_width, x + width_to_use)
+                    end_y = min(canvas_height, y + height_to_use)
+                    
+                    # Calculate actual dimensions that will fit
+                    actual_width = end_x - x
+                    actual_height = end_y - y
+                    
+                    if actual_width > 0 and actual_height > 0:
+                        # Get the regions that match in size
+                        canvas_region = canvas[y:end_y, x:end_x]
+                        clone_region = clone_img[:actual_height, :actual_width]
+                        mask_region = current_mask[:actual_height, :actual_width]
+                        
+                        # Ensure all regions have the same shape
+                        if (canvas_region.shape[:2] == clone_region.shape[:2] == mask_region.shape and
+                            canvas_region.shape[2] == clone_region.shape[2] == 3):
+                            
+                            # Create alpha mask for smooth blending
+                            clone_mask_3d = cv2.cvtColor(mask_region, cv2.COLOR_GRAY2BGR) / 255.0
+                            
+                            # Ensure mask dimensions match
+                            if clone_mask_3d.shape == canvas_region.shape:
+                                blended = canvas_region * (1 - clone_mask_3d) + clone_region * clone_mask_3d
+                                canvas[y:end_y, x:end_x] = blended.astype(np.uint8)
+                            else:
+                                print(f"Shape mismatch in blending: canvas {canvas_region.shape}, mask {clone_mask_3d.shape}")
+                        else:
+                            print(f"Shape mismatch: canvas {canvas_region.shape}, clone {clone_region.shape}, mask {mask_region.shape}")
+            
+            # Store the result and display using your existing method
+            self.cartoon_image = canvas
+            self.current_filter = "clone"
+            self.show_image(canvas, is_original=False)
+            
+            # Enable save and share buttons
+            if hasattr(self, 'save_button'):
+                self.save_button.config(state='normal')
+            if hasattr(self, 'share_button'):
+                self.share_button.config(state='normal')
+                
+            print("Clone filter applied successfully!")
+            
+        except Exception as e:
+            print(f"Error applying clone filter: {e}")
+            import traceback
+            traceback.print_exc()
 
     def save_image(self):
         if self.cartoon_image is not None:
