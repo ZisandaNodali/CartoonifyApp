@@ -112,9 +112,11 @@ class CartoonifyApp:
             widget.destroy()
         
         # Title label
-        self.title_label = Label(self.root, text="Let's cartoonify your image", font=("Arial", 20), 
-                                bg="#001839", fg="white")
-        self.title_label.pack(pady=20)
+        self.title_label = Label(self.root, text="🎨 Let's Cartoonify Your Image! 🎨", 
+                        font=("Segoe UI", 24, "bold"), 
+                        bg="#001839", fg= "#FFD93D",
+                        relief="flat", bd=0)
+        self.title_label.pack(pady=(30, 20))
 
         # Create image source buttons frame
         self.source_frame = Frame(self.root, bg="#001839")
