@@ -568,7 +568,7 @@ class CartoonifyApp:
         faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
         
         if len(faces) == 0:
-            self.beauty_label.config(text="No face detected", fg="red")
+            self.beauty_label.config(text="", fg="red")
             return
         
         # Get the first face
@@ -591,16 +591,16 @@ class CartoonifyApp:
         
         # Rating text
         if beauty_score >= 85:
-            rating = "Gorgeous! 😍"
+            rating = "Great"
             color = "#4CAF50"  # Green
         elif beauty_score >= 70:
-            rating = "Beautiful! 😊"
+            rating = "Good"
             color = "#8BC34A"  # Light green
         elif beauty_score >= 50:
-            rating = "Pretty! 🙂"
+            rating = "Average"
             color = "#FFC107"  # Yellow
         else:
-            rating = "Average"
+            rating = "Bad"
             color = "#FF9800"  # Orange
         
         self.beauty_label.config(
