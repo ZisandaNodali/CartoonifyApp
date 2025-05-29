@@ -504,9 +504,9 @@ class CartoonifyApp:
 
              #.................ESTIMATE AGE..........................
 
-    def estimate_age(self):
+     def estimate_age(self):
         if self.original_image is None:
-            print("No image loaded.")
+            messagebox.showerror("Error", "No image loaded.")
             return
 
         # Convert PIL image to OpenCV format
@@ -517,7 +517,7 @@ class CartoonifyApp:
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
 
         if len(faces) == 0:
-            print("No faces detected.")
+            messagebox.showerror("Error", "Face is not recognized.")
             return
 
         # For simplicity, use the first face
@@ -539,8 +539,6 @@ class CartoonifyApp:
         self.display_image_on_panel(labeled_pil, self.panel_original)
 
     def mock_age_estimator(self, face_image):
-        # Placeholder function for demo purposes
-        import random
         return random.randint(18, 60)
 
     def display_image_on_panel(self, image, panel):
