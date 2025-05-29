@@ -264,7 +264,8 @@ class CartoonifyApp:
 # .......... Voice Toggle Mic Button (Image/Icon) ..........
         
         self.voice_toggle_button = Button(self.source_frame, text="🎙️", command=self.toggle_voice_assistant,
-                                      bg="#001839", fg="white", font=("Arial", 28), padx=5, pady=5, borderwidth=0)
+                                      bg="#001839", fg="white", font=("Arial", 28), padx=0, pady=0, borderwidth=0,highlightthickness=0,    activebackground="#001839",  # Matches bg
+    activeforeground="white" )
 
         self.voice_toggle_button.pack(side=tk.LEFT, padx=(0,5),pady=(5, 22))  # <== Place it in source_frame beside other buttons
 
