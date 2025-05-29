@@ -517,7 +517,7 @@ class CartoonifyApp:
 
              #.................ESTIMATE AGE..........................
 
-     def estimate_age(self):
+    def estimate_age(self):
         if self.original_image is None:
             messagebox.showerror("Error", "No image loaded.")
             return
