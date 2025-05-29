@@ -344,7 +344,7 @@ class CartoonifyApp:
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.share_button.grid(row=0, column=2, padx=10)
 
-            style = ttk.Style(self.root)
+        style = ttk.Style(self.root)
         style.theme_use('default')
 
         style.configure("Custom.Horizontal.TProgressbar",
