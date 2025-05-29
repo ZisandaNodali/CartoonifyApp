@@ -344,8 +344,22 @@ class CartoonifyApp:
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.share_button.grid(row=0, column=2, padx=10)
 
+            style = ttk.Style(self.root)
+        style.theme_use('default')
+
+        style.configure("Custom.Horizontal.TProgressbar",
+                        troughcolor='#e0e0e0',
+                        background='#4caf50',   # green bar
+                        thickness=10,
+                        bordercolor='gray',
+                        lightcolor='#6fcf97',
+                        darkcolor='#4caf50')
+
         # Add progress bar (initially hidden)
-        self.progress_bar = ttk.Progressbar(self.root, mode='indeterminate', length=300)
+        self.progress_bar = ttk.Progressbar(self.root,
+                                            mode='indeterminate',
+                                            length=300,
+                                            style="Custom.Horizontal.TProgressbar")
 
     def show_loading_bar(self, after_callback=None):
         self.progress_bar.place(relx=0.5, rely=0.95, anchor='center')
@@ -354,7 +368,6 @@ class CartoonifyApp:
             self.root.after(3000, lambda: [self.hide_loading_bar(), after_callback()])
         else:
             self.root.after(3000, self.hide_loading_bar)
-
     def on_filter_selected(self, filter_name):
         self.selected_filter = filter_name
         self.show_loading_bar()
