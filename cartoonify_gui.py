@@ -674,7 +674,7 @@ class CartoonifyApp:
 
             if getattr(self, 'is_mic_on', False):
         # Delay voice prompt to allow image to render first
-                self.root.after(800, lambda: self.speak("Image uploaded. Which filter would you like to apply? Choose between cartoon, sketch, winx, or clone."))
+                self.root.after(800, lambda: self.speak("Image uploaded. Which filter would you like to apply?"))
                 self.root.after(3000, self.ask_for_filter) 
              #.................ESTIMATE AGE..........................
 
