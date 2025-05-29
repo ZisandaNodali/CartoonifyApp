@@ -9,6 +9,10 @@ import requests
 import numpy as np
 from tkinter import ttk
 import random
+import speech_recognition as sr
+import pyttsx3
+import threading
+from difflib import get_close_matches
 
 class CartoonifyApp:
     def __init__(self, root):
@@ -16,7 +20,21 @@ class CartoonifyApp:
         self.root.title("Cartoonify")
         self.root.geometry("800x600")
         self.root.configure(bg="#001839")  # Dark blue background
-        
+        self.voice_lock = threading.Lock()
+
+
+        self.voice_stop_flag = True
+        self.is_mic_on = False
+
+        self.recognizer = sr.Recognizer()
+        self.voice_engine = pyttsx3.init()
+        self.set_south_african_voice()
+        self.voice_stop_flag = True
+        self.is_mic_on = False
+
+        self.recognizer.pause_threshold = 0.8
+        self.recognizer.energy_threshold = 300
+     
         # Center the window
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -105,7 +123,96 @@ class CartoonifyApp:
         
         # Start the animation
         resize_step(1)
-    
+
+    def toggle_voice_assistant(self):
+        if self.voice_stop_flag:
+            self.voice_stop_flag = False
+            self.is_mic_on = True
+            self.speak("Voice assistant activated.")
+            threading.Thread(target=self.run_voice_assistant, daemon=True).start()
+        else:
+            self.voice_stop_flag = True
+            self.is_mic_on = False
+            self.speak("Voice assistant deactivated.")
+
+    def start_voice_assistant(self):
+    # Start your voice assistant thread if not already running
+        if not hasattr(self, 'voice_thread') or not self.voice_thread.is_alive():
+            self.voice_thread = threading.Thread(target=self.run_voice_assistant, daemon=True)
+            self.voice_thread.start()
+            self.speak("Voice assistant activated. Say 'Hey Pixie' to start.")
+
+    def stop_voice_assistant(self):
+    # Stop the voice assistant gracefully by setting a flag
+        self.voice_stop_flag = True
+        self.speak("Voice assistant deactivated.")
+
+    def run_voice_assistant(self):
+        self.voice_stop_flag = False
+        self.speak("Welcome to Tooniepix. You can upload an image or capture one with the camera.")
+        while not self.voice_stop_flag:
+        # existing code here for listening...
+            try:
+                with sr.Microphone() as source:
+                    self.recognizer.adjust_for_ambient_noise(source)
+                    audio = self.recognizer.listen(source, timeout=5)
+                    command = self.recognizer.recognize_google(audio).lower()
+                    print(f"Recognized: {command}")
+
+                    if self.is_match(command, ["hey pixie", "hey pics", "hey piss", "hey pixy"]):
+                        self.speak("Hello! You can upload an image or capture one with the camera.")
+                        self.wait_for_image_command()
+
+            # optionally add a short sleep here to prevent 100% CPU
+            except sr.WaitTimeoutError:
+                continue
+            except sr.UnknownValueError:
+                continue
+            except Exception as e:
+                print(f"Voice Error: {e}")
+        print("Voice assistant stopped.")
+
+    def speak(self, text):
+        with self.voice_lock:
+            self.voice_engine.say(text)
+            self.voice_engine.runAndWait()
+
+    def is_match(self, command, keywords):
+        for keyword in keywords:
+            if keyword in command:
+                return keyword
+        matches = get_close_matches(command, keywords, n=1, cutoff=0.6)
+        return matches[0] if matches else None
+
+
+
+
+    def listen_command(self, timeout=5):
+        with self.voice_lock:
+            try:
+                with sr.Microphone() as source:
+                    self.recognizer.adjust_for_ambient_noise(source)
+                    audio = self.recognizer.listen(source, timeout=timeout)
+                return self.recognizer.recognize_google(audio).lower()
+            except sr.WaitTimeoutError:
+                print("Listening timed out.")
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
+            except Exception as e:
+                print(f"Recognition error: {e}")
+            return None
+
+    def set_south_african_voice(self):
+        voices = self.voice_engine.getProperty('voices')
+        for voice in voices:
+            if "english" in voice.name.lower() and "south africa" in voice.name.lower():
+                self.voice_engine.setProperty('voice', voice.id)
+                return
+        for voice in voices:
+            if "english" in voice.name.lower() and "female" in voice.name.lower():
+                self.voice_engine.setProperty('voice', voice.id)
+                return
+
     def init_main_interface(self):
         # Clear any existing widgets from root
         for widget in self.root.winfo_children():
@@ -121,6 +228,7 @@ class CartoonifyApp:
         # Create image source buttons frame
         self.source_frame = Frame(self.root, bg="#001839")
         self.source_frame.pack(pady=10)
+        self.progress_bar = ttk.Progressbar(self.root, mode='indeterminate', length=300)
 
         # Open Image Button
         self.open_button = Button(self.source_frame, text="Upload Image", command=self.open_image, 
@@ -144,16 +252,31 @@ class CartoonifyApp:
                                       padx=10, pady=5, borderwidth=0)
         
         self.camera_button.pack(side=tk.LEFT, padx=10)
-
-        # Image display frame (side-by-side with arrow between)
+        # Add mic toggle button
+                # Image display frame (side-by-side with arrow between)
         self.image_frame = Frame(self.root, bg="#001839")
         self.image_frame.pack(pady=20)
 
-         # ...........................Estimate Age Button..............................
+# .......... Estimate Age Button ..........
         self.age_button = Button(self.source_frame, text="Estimate Age", command=self.estimate_age,
                          bg="#1976D2", fg="white", font=("Arial", 12),
                          padx=10, pady=5, borderwidth=0)
         self.age_button.pack(side=tk.LEFT, padx=10)
+# .......... Voice Toggle Mic Button (Image/Icon) ..........
+        try:
+            mic_img = Image.open("images/mic_icon.png")
+            mic_img = mic_img.resize((30, 30), Image.LANCZOS)
+            self.mic_photo = ImageTk.PhotoImage(mic_img)
+
+            self.voice_toggle_button = Button(self.source_frame, image=self.mic_photo, command=self.toggle_voice_assistant,
+                                      bg="#1976D2", borderwidth=0, padx=10, pady=5)
+        except Exception as e:
+            print(f"Error loading mic icon: {e}")
+        self.voice_toggle_button = Button(self.source_frame, text="🎙️", command=self.toggle_voice_assistant,
+                                      bg="#001839", fg="white", font=("Arial", 28), padx=5, pady=5, borderwidth=0)
+
+        self.voice_toggle_button.pack(side=tk.LEFT, padx=(0,5),pady=(5, 22))  # <== Place it in source_frame beside other buttons
+
 
         # Original image container (white square)
         self.panel_original = Label(self.image_frame, bg="white", width=25, height=13)
@@ -344,9 +467,10 @@ class CartoonifyApp:
                                  padx=15, pady=5, borderwidth=0, state='disabled')
         self.share_button.grid(row=0, column=2, padx=10)
 
+
         style = ttk.Style(self.root)
         style.theme_use('default')
-
+ 
         style.configure("Custom.Horizontal.TProgressbar",
                         troughcolor='#e0e0e0',
                         background='#4caf50',   # green bar
@@ -354,12 +478,14 @@ class CartoonifyApp:
                         bordercolor='gray',
                         lightcolor='#6fcf97',
                         darkcolor='#4caf50')
-
+ 
         # Add progress bar (initially hidden)
         self.progress_bar = ttk.Progressbar(self.root,
                                             mode='indeterminate',
                                             length=300,
                                             style="Custom.Horizontal.TProgressbar")
+ 
+        # Add progress bar (initially hidden)
 
     def show_loading_bar(self, after_callback=None):
         self.progress_bar.place(relx=0.5, rely=0.95, anchor='center')
@@ -373,11 +499,11 @@ class CartoonifyApp:
         self.show_loading_bar()
         # After 3 seconds, apply the filter
         self.root.after(3000, self.apply_selected_filter)
-
+ 
     def hide_loading_bar(self):
         self.progress_bar.stop()
         self.progress_bar.place_forget()
-   
+
     def apply_selected_filter(self):
         self.hide_loading_bar()
 
@@ -488,16 +614,51 @@ class CartoonifyApp:
         self.release_camera()  # Release camera resources
         # Transition back to main interface
         self.animate_transition(680, 520, 800, 600, steps=10, target_interface=self.init_main_interface)
-    
+    def process_voice_command(self, command):
+        if "reset" in command:
+            self.speak("Resetting the app.")
+            self.root.after(0, self.reset_app)
+    # add more commands here as needed
+
+    def wait_for_image_command(self):
+        self.speak("Say 'upload' to choose an image or 'camera' to take a photo.")
+        try:
+            with sr.Microphone() as source:
+                self.recognizer.adjust_for_ambient_noise(source)
+                audio = self.recognizer.listen(source, timeout=6)
+                command = self.recognizer.recognize_google(audio).lower()
+                print(f"Image Command: {command}")
+
+                if "upload" in command:
+                    self.speak("Uploading image.")
+                    self.root.after(0, self.open_image)
+                elif "camera" in command:
+                    self.speak("Opening camera.")
+                    self.root.after(0, self.init_camera_interface)
+                elif "reset" in command:
+                    self.speak("Resetting the app.")
+                    self.root.after(0, self.reset_app)
+                else:
+                    self.speak("I didn’t catch that. Please say 'upload', 'camera', or 'reset'.")
+                    self.wait_for_image_command()
+        except Exception as e:
+            print(f"Error while listening for image command: {e}")
+            self.speak("Something went wrong. Please try again.")
+            self.wait_for_image_command()
+
     def return_to_main_with_image(self):
-        self.init_main_interface()  # Set up the main interface
-        # Show the captured image
+        self.init_main_interface()
         self.show_image(self.original_image, is_original=True)
         self.save_button.config(state='normal')
         self.share_button.config(state='normal')
-        # Analyze the face for beauty rating
         self.analyze_face()
-    
+
+        if getattr(self, 'is_mic_on', False):
+        # Delay voice prompt to allow image to render first
+            self.root.after(800, lambda: self.speak("Image uploaded. Which filter would you like to apply? Choose between cartoon, sketch, winx, or clone."))
+            self.root.after(3000, self.ask_for_filter) 
+
+
     def release_camera(self):
         # Release the webcam resources
         if hasattr(self, 'cap') and self.cap and self.cap.isOpened():
@@ -515,11 +676,17 @@ class CartoonifyApp:
             # Analyze the face for beauty rating
             self.analyze_face()
 
+
+            if getattr(self, 'is_mic_on', False):
+        # Delay voice prompt to allow image to render first
+                self.root.after(800, lambda: self.speak("Image uploaded. Which filter would you like to apply? Choose between cartoon, sketch, winx, or clone."))
+                self.root.after(3000, self.ask_for_filter) 
              #.................ESTIMATE AGE..........................
 
     def estimate_age(self):
         if self.original_image is None:
             messagebox.showerror("Error", "No image loaded.")
+            print("No image loaded.")
             return
 
         # Convert PIL image to OpenCV format
@@ -528,11 +695,12 @@ class CartoonifyApp:
         # Detect faces
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
-
+        if getattr(self, 'is_mic_on', False):
+            self.speak("Estimating age from the image.")
         if len(faces) == 0:
             messagebox.showerror("Error", "Face is not recognized.")
             return
-
+        # If multiple faces are detected, you can choose how to handle them
         # For simplicity, use the first face
         (x, y, w, h) = faces[0]
         face_img = cv_image[y:y+h, x:x+w]
@@ -552,6 +720,8 @@ class CartoonifyApp:
         self.display_image_on_panel(labeled_pil, self.panel_original)
 
     def mock_age_estimator(self, face_image):
+        # Placeholder function for demo purposes
+        import random
         return random.randint(18, 60)
 
     def display_image_on_panel(self, image, panel):
@@ -567,6 +737,8 @@ class CartoonifyApp:
         gray = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
         faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
         
+        if getattr(self, 'is_mic_on', False):
+                self.speak("Analyzing image for quality rating")
         if len(faces) == 0:
             self.beauty_label.config(text="", fg="red")
             return
@@ -602,9 +774,8 @@ class CartoonifyApp:
         else:
             rating = "Bad"
             color = "#FF9800"  # Orange
-        
         self.beauty_label.config(
-            text=f"Quality Rating: {beauty_score}% - {rating}", 
+            text=f"Quality Rating: {beauty_score}% - {rating}",
             fg=color
         )
     
@@ -641,6 +812,8 @@ class CartoonifyApp:
         color = cv2.bilateralFilter(img, d=9, sigmaColor=250, sigmaSpace=250)
         cartoon = cv2.bitwise_and(color, color, mask=edges)
 
+        if getattr(self, 'is_mic_on', False):
+                self.speak("cartoon filter applied! You can now save or share your cartoon image.")
         self.cartoon_image = cartoon
         self.current_filter = "cartoon"
         self.show_image(cartoon, is_original=False)
@@ -663,7 +836,8 @@ class CartoonifyApp:
                                     cv2.THRESH_BINARY, 9, 10)
         sketch_bgr = cv2.cvtColor(sketch, cv2.COLOR_GRAY2BGR)
 
-
+        if getattr(self, 'is_mic_on', False):
+                self.speak("Sketch filter applied! You can now save or share your sketch image.")
         self.cartoon_image = sketch_bgr
         self.current_filter = "sketch"
         self.show_image(sketch_bgr, is_original=False)
@@ -698,6 +872,8 @@ class CartoonifyApp:
         hsv_modified = cv2.merge([h, s, v])
         winx_img = cv2.cvtColor(hsv_modified, cv2.COLOR_HSV2BGR)
 
+        if getattr(self, 'is_mic_on', False):
+                self.speak("Winxclub filter applied! You can now save or share your winxclub image.")
         # Display the result
         self.cartoon_image = winx_img
         self.current_filter = "winxclub"
@@ -868,7 +1044,8 @@ class CartoonifyApp:
                                 print(f"Shape mismatch in blending: canvas {canvas_region.shape}, mask {clone_mask_3d.shape}")
                         else:
                             print(f"Shape mismatch: canvas {canvas_region.shape}, clone {clone_region.shape}, mask {mask_region.shape}")
-            
+            if getattr(self, 'is_mic_on', False):
+                self.speak("Clone filter applied! You can now save or share your cloned image.")
             # Store the result and display using your existing method
             self.cartoon_image = canvas
             self.current_filter = "clone"
@@ -895,6 +1072,9 @@ class CartoonifyApp:
                 cv2.imwrite(file_path, self.cartoon_image)
                 self.cartoon_image_path = file_path  # Store the path for sharing
                 messagebox.showinfo("Saved", "Image saved successfully!")
+            
+            if getattr(self, 'is_mic_on', False):  # This safely checks if mic is on
+                self.speak("Image saved successfully! You can now share it on social media or via email.")  
 
     def upload_to_gofile(self, file_path):
         try:
@@ -934,12 +1114,14 @@ class CartoonifyApp:
 
     def open_socials_window(self):
         if not hasattr(self, 'cartoon_image_path') or not self.cartoon_image_path or not os.path.exists(self.cartoon_image_path):
-            # If no saved file, save it first
+        # If no saved file, save it first
+            if getattr(self, 'is_mic_on', False):
+                self.speak("Please save your cartoon image first.")
             self.save_image()
             if not hasattr(self, 'cartoon_image_path') or not self.cartoon_image_path:
                 return  # User cancelled save
 
-        # Upload to GoFile and get URL
+    # Upload to GoFile and get URL
         self.uploaded_image_url = self.upload_to_gofile(self.cartoon_image_path)
         if not self.uploaded_image_url:
             return
@@ -948,7 +1130,7 @@ class CartoonifyApp:
         socials.title("Share on Socials")
         socials.geometry("400x280")
         socials.config(bg="white")
-
+        
         tk.Label(socials, text="✅ Image uploaded successfully!", font=("Arial", 12), fg="green", bg="white").pack(pady=10)
         tk.Label(socials, text="Now you can share it on socials:", font=("Arial", 10), bg="white").pack(pady=5)
 
@@ -956,42 +1138,51 @@ class CartoonifyApp:
         Button(socials, text="🐦 Share on Twitter", command=self.share_on_twitter, width=30).pack(pady=5)
         Button(socials, text="📧 Share via Email", command=self.share_via_email, width=30).pack(pady=5)
 
+    # 🔊 Voice guide if mic is on
+        if getattr(self, 'is_mic_on', False):
+            self.speak("Your image is ready to share. Use the buttons to post it to WhatsApp, Twitter, or send it by email.")
     def share_on_whatsapp(self):
         if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            if getattr(self, 'is_mic_on', False):
+                self.speak("Opening WhatsApp. Get ready to share your cartoon masterpiece!")
             message = f"Check out this cartoon image I made! 🤩 {self.uploaded_image_url}"
             url = "https://web.whatsapp.com/send?text=" + urllib.parse.quote(message)
             webbrowser.open(url)
 
     def share_on_twitter(self):
         if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            if getattr(self, 'is_mic_on', False):
+                self.speak("Now posting your cartoonified image to Twitter. Add your hashtags if you like!")
             message = f"Just cartoonified my photo! 😎 Check it out: {self.uploaded_image_url} #CartoonifyApp"
             url = "https://twitter.com/intent/tweet?text=" + urllib.parse.quote(message)
             webbrowser.open(url)
-
     def share_via_email(self):
         if hasattr(self, 'uploaded_image_url') and self.uploaded_image_url:
+            if getattr(self, 'is_mic_on', False):
+                self.speak("Composing an email with your cartoon image. Add your contacts and hit send!")
+
             subject = urllib.parse.quote("Check out my Cartoonified Image! 🎨")
-            
-            # Plain text format that works better with email clients
+        
+        # Plain text format that works better with email clients
             plain_body = f"""Hey there! 👋
 
-    I just created this awesome cartoon image using CartoonifyApp and wanted to share it with you!
+I just created this awesome cartoon image using CartoonifyApp and wanted to share it with you!
 
-    🔗 VIEW MY CARTOON IMAGE:
+🔗 VIEW MY CARTOON IMAGE:
     {self.uploaded_image_url}
 
-    👆 Just click the link above to see it!
+👆 Just click the link above to see it!
 
-    (If the link doesn't work, copy and paste it into your browser)
+(If the link doesn't work, copy and paste it into your browser)
 
-    Hope you like it! 😊
+Hope you like it! 😊
 
-    ---
-    Created with CartoonifyApp"""
-            
+---
+Created with CartoonifyApp"""
+
             body = urllib.parse.quote(plain_body)
             webbrowser.open(f"mailto:?subject={subject}&body={body}")
-            
+          
     def reset_app(self):
         self.original_image = None
         self.cartoon_image = None
@@ -999,28 +1190,31 @@ class CartoonifyApp:
         self.cartoon_image_path = ""
         self.uploaded_image_url = ""
 
-        # Clear image displays
+    # Clear image displays
         self.panel_original.configure(image="", width=25, height=13)
         self.panel_cartoon.configure(image="", width=25, height=13)
-        
-        # Reset image references
+    
+    # Reset image references
         if hasattr(self.panel_original, 'image'):
             self.panel_original.image = None
         if hasattr(self.panel_cartoon, 'image'):
             self.panel_cartoon.image = None
-            
-        # Reset filter button highlights - make them invisible again
+        
+    # Reset filter button highlights - make them invisible again
         self.cartoon_container.config(highlightbackground="#001839")
         self.sketch_container.config(highlightbackground="#001839")
         self.winx_container.config(highlightbackground="#001839")
-            
-        # Disable save and share buttons
+        
+    # Disable save and share buttons
         self.save_button.config(state='disabled')
         self.share_button.config(state='disabled')
-        
-        # Clear beauty rating
+    
+    # Clear beauty rating
         self.beauty_label.config(text="")
 
+    # ✅ Only speak if mic is active
+        if getattr(self, 'is_mic_on', False):  # This safely checks if mic is on
+            self.speak("The app has been reset. Please upload a new image or take a photo.")
 
 if __name__ == "__main__":
     root = tk.Tk()
