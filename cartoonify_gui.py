@@ -262,15 +262,7 @@ class CartoonifyApp:
                          padx=10, pady=5, borderwidth=0)
         self.age_button.pack(side=tk.LEFT, padx=10)
 # .......... Voice Toggle Mic Button (Image/Icon) ..........
-        try:
-            mic_img = Image.open("images/mic_icon.png")
-            mic_img = mic_img.resize((30, 30), Image.LANCZOS)
-            self.mic_photo = ImageTk.PhotoImage(mic_img)
-
-            self.voice_toggle_button = Button(self.source_frame, image=self.mic_photo, command=self.toggle_voice_assistant,
-                                      bg="#1976D2", borderwidth=0, padx=10, pady=5)
-        except Exception as e:
-            print(f"Error loading mic icon: {e}")
+        
         self.voice_toggle_button = Button(self.source_frame, text="🎙️", command=self.toggle_voice_assistant,
                                       bg="#001839", fg="white", font=("Arial", 28), padx=5, pady=5, borderwidth=0)
 
